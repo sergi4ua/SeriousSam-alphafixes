@@ -1,23 +1,4 @@
 /*
-    editorfix - fixes for Serious Sam Alpha editor
-    Copyright (C) 2026 Sergi4UA
-
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License along
-    with this program; if not, write to the Free Software Foundation, Inc.,
-    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
-
-/*
  * SamAlphaFix.dll - fixes for the Serious Sam alpha World Editor
  * (WorldEditor.exe, build of 13 Jan 2000).
  *
@@ -65,10 +46,33 @@
  * modified flag.  Engine errors (C++ exceptions carrying a char * message)
  * are shown with the engine's WarningMessage(), the same way the stub showed
  * its message.
+ *
+ *
+ * 3. Free camera (new feature)
+ * ============================
+ * Esc in a perspective view switches to a fly-through camera: the mouse
+ * looks around, WASD moves, Q/E move down/up, Shift is faster and the mouse
+ * wheel changes the speed.  Esc again (or switching to another window) goes
+ * back to normal editing.
+ *
+ * The camera of an editor window is its CChildFrame's master viewer, which
+ * all four views render from.  Free cam moves that viewer's eye placement
+ * with the engine's CPlacement3D::Translate_OwnSystem(), exactly like the
+ * editor's own camera commands, and repaints the views.  Esc reaches
+ * CWorldEditorView::OnKeyDown (Esc isn't an accelerator), so that message
+ * map entry is redirected here.  While flying, a WH_GETMESSAGE hook keeps
+ * W/A/S/D/Q/E from triggering the editor's accelerators and keeps the mouse
+ * away from the view's own handlers.
  */
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <commctrl.h>
+#include <string.h>
+
+#pragma comment(lib, "user32.lib")
+
+#define AFX_IDW_STATUS_BAR  0xE801   /* MFC's status bar control ID */
 
 
 /* ---------------------------------------------------------------------- */
@@ -263,15 +267,20 @@ static BOOL SetVTableSlot(void **ppvSlot, void *pvValue)
   return TRUE;
 }
 
-static void InstallSaveFix(HMODULE hEngine)
+/* Only touch the exact WorldEditor build this was written for. */
+static BOOL IsKnownWorldEditor(void)
 {
   const BYTE *pubExe = (const BYTE *)GetModuleHandleA(NULL);
   const IMAGE_NT_HEADERS *pnt;
 
-  /* only touch the exact WorldEditor build this was written for */
-  if (pubExe != (const BYTE *)WE_IMAGE_BASE) return;
+  if (pubExe != (const BYTE *)WE_IMAGE_BASE) return FALSE;
   pnt = (const IMAGE_NT_HEADERS *)(pubExe + ((const IMAGE_DOS_HEADER *)pubExe)->e_lfanew);
-  if (pnt->FileHeader.TimeDateStamp != WE_TIMESTAMP) return;
+  return pnt->FileHeader.TimeDateStamp == WE_TIMESTAMP;
+}
+
+static void InstallSaveFix(HMODULE hEngine)
+{
+  if (!IsKnownWorldEditor()) return;
   if (WE_DOC_VTABLE[WE_VTBL_ONSAVEDOCUMENT] != WE_ONSAVEDOCUMENT_STUB) return;
 
   _pfnFileNameCtor          = (CTFileName_Ctor_t)GetProcAddress(hEngine, "??0CTFileName@@QAE@PBDH@Z");
@@ -297,6 +306,337 @@ static void UninstallSaveFix(void)
 
 
 /* ---------------------------------------------------------------------- */
+/* 3. Free camera                                                          */
+/* ---------------------------------------------------------------------- */
+
+/* Each editor window (CChildFrame) owns one master viewer that all four
+   views of that window render from.  Its first member is the camera (eye)
+   placement; the orbit target sits mv_fTargetDistance in front of it. */
+#define WE_FRAME_MASTERVIEWER   0x200                  /* CChildFrame::m_mvViewer */
+#define WE_VIEW_HWND            0x20                   /* CWnd::m_hWnd */
+#define WE_VIEW_DOCUMENT        0x40                   /* CView::m_pDocument */
+#define WE_VIEW_PROJECTION      0x12C                  /* CWorldEditorView projection type */
+#define WE_PROJECTION_PERSPECTIVE 1
+#define WE_VIEW_KEYDOWN_ENTRY   ((void **)0x0045D61C)  /* message map: WM_KEYDOWN -> pfn */
+#define WE_VIEW_ONKEYDOWN       ((void *)0x0043C2F0)   /* CWorldEditorView::OnKeyDown */
+#define WE_GETPARENTFRAME       ((void *)0x00442850)   /* CWnd::GetParentFrame thunk */
+#define WE_UPDATEALLVIEWS       ((void *)0x004502DC)   /* CDocument::UpdateAllViews thunk */
+
+#define FREECAM_TIMER_ID        0x5A11
+#define FREECAM_TICK_MS         10
+/* Base speed follows the scale of what is being looked at: a quarter of the
+   distance to the camera's orbit target per second.  The mouse wheel scales it. */
+#define FREECAM_SPEED_PER_DISTANCE 0.25f
+#define FREECAM_BASE_SPEED_MIN  2.0f     /* metres per second */
+#define FREECAM_BASE_SPEED_MAX  500.0f
+#define FREECAM_WHEEL_MIN       0.02f
+#define FREECAM_WHEEL_MAX       50.0f
+#define FREECAM_FAST_FACTOR     4.0f     /* while Shift is held */
+#define FREECAM_MOUSE_DEGREES   0.15f    /* per pixel of mouse movement */
+#define FREECAM_OTHERVIEWS_MS   200      /* how often the other three views follow */
+
+typedef struct {
+  float vPosition[3];       /* x, y (up), z */
+  float aOrientation[3];    /* heading, pitch, banking in degrees */
+} CPlacement3D;
+
+typedef struct {
+  CPlacement3D mv_plViewer;
+  float        mv_fTargetDistance;
+} CMasterViewer;
+
+typedef void  (__fastcall *View_OnKeyDown_t)(void *pView, void *pvEdx, UINT nChar, UINT nRepCnt, UINT nFlags);
+typedef void *(__fastcall *Wnd_GetParentFrame_t)(void *pWnd, void *pvEdx);
+typedef void  (__fastcall *Document_UpdateAllViews_t)(void *pDoc, void *pvEdx, void *pSender, LPARAM lHint, void *pHint);
+typedef void  (__fastcall *Placement_TranslateOwnSystem_t)(CPlacement3D *ppl, void *pvEdx, const float *pvDelta);
+
+static Placement_TranslateOwnSystem_t _pfnTranslateOwnSystem;
+static BOOL _bFreeCamInstalled = FALSE;
+
+static struct {
+  BOOL   bActive;
+  void  *pView;
+  HWND   hwndView;
+  HWND   hwndStatusBar;
+  char   strOldStatus[256];
+  HHOOK  hhkMessages;
+  POINT  ptOldCursor;
+  float  fBaseSpeed;        /* from the orbit distance when free cam started */
+  float  fWheelFactor;      /* mouse wheel; kept between uses */
+  LARGE_INTEGER llLastTick;
+  LARGE_INTEGER llLastOtherViews;
+  LARGE_INTEGER llFrequency;
+} _fc = { FALSE, NULL, NULL, NULL, "", NULL, { 0, 0 }, 16.0f, 1.0f };
+
+static BOOL IsFreeCamKey(WPARAM vk)
+{
+  return vk == 'W' || vk == 'A' || vk == 'S' || vk == 'D' || vk == 'Q' || vk == 'E';
+}
+
+static BOOL IsKeyDown(int vk)
+{
+  return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+/* The view or the engine's "ViewPort Window" that covers it. */
+static BOOL IsInView(HWND hwnd)
+{
+  return hwnd != NULL && (hwnd == _fc.hwndView || IsChild(_fc.hwndView, hwnd));
+}
+
+static CMasterViewer *GetMasterViewer(void *pView)
+{
+  char *pFrame = (char *)((Wnd_GetParentFrame_t)WE_GETPARENTFRAME)(pView, NULL);
+  return (pFrame != NULL) ? (CMasterViewer *)(pFrame + WE_FRAME_MASTERVIEWER) : NULL;
+}
+
+static void UpdateAllViews(void *pView, void *pSender)
+{
+  void *pDoc = *(void **)((char *)pView + WE_VIEW_DOCUMENT);
+  if (pDoc != NULL) ((Document_UpdateAllViews_t)WE_UPDATEALLVIEWS)(pDoc, NULL, pSender, 0, NULL);
+}
+
+static POINT GetViewCenter(HWND hwnd)
+{
+  RECT rc;
+  POINT pt;
+  GetClientRect(hwnd, &rc);
+  pt.x = (rc.left + rc.right) / 2;
+  pt.y = (rc.top + rc.bottom) / 2;
+  ClientToScreen(hwnd, &pt);
+  return pt;
+}
+
+static void ClipCursorToView(HWND hwnd)
+{
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  MapWindowPoints(hwnd, NULL, (POINT *)&rc, 2);
+  ClipCursor(&rc);
+}
+
+static void ExitFreeCam(void);
+
+static void ShowFreeCamStatus(void)
+{
+  char strStatus[256];
+  if (_fc.hwndStatusBar == NULL || !IsWindow(_fc.hwndStatusBar)) return;
+  wsprintfA(strStatus, "Free camera (%d m/s): mouse to look, WASD to move, Q/E down/up, "
+    "Shift faster, wheel changes speed, Esc to exit", (int)(_fc.fBaseSpeed * _fc.fWheelFactor + 0.5f));
+  SendMessageA(_fc.hwndStatusBar, SB_SETTEXTA, 0, (LPARAM)strStatus);
+}
+
+/* The editor rewrites the status text when modifier keys change (Shift...). Put ours back. */
+static void KeepFreeCamStatus(void)
+{
+  char strCurrent[256];
+  if (_fc.hwndStatusBar == NULL || !IsWindow(_fc.hwndStatusBar)) return;
+  if (LOWORD(SendMessageA(_fc.hwndStatusBar, SB_GETTEXTLENGTHA, 0, 0)) >= sizeof(strCurrent)) return;
+  SendMessageA(_fc.hwndStatusBar, SB_GETTEXTA, 0, (LPARAM)strCurrent);
+  if (strncmp(strCurrent, "Free camera", 11) != 0) ShowFreeCamStatus();
+}
+
+/* While flying, keep the movement keys away from the editor's accelerators
+   (W, S and D are editor commands) and the mouse away from the view. */
+static LRESULT CALLBACK FreeCamMessageHook(int nCode, WPARAM wParam, LPARAM lParam)
+{
+  if (nCode == HC_ACTION && _fc.bActive) {
+    MSG *pmsg = (MSG *)lParam;
+    if (!IsWindow(_fc.hwndView)) {
+      ExitFreeCam();
+    } else {
+      switch (pmsg->message) {
+      case WM_KEYDOWN:
+      case WM_KEYUP:
+        if (IsFreeCamKey(pmsg->wParam)) pmsg->message = WM_NULL;
+        break;
+      case WM_MOUSEWHEEL:
+        if (wParam == PM_REMOVE) {
+          short sDelta = (short)HIWORD(pmsg->wParam);
+          _fc.fWheelFactor *= (sDelta > 0) ? 1.25f : 0.8f;
+          if (_fc.fWheelFactor < FREECAM_WHEEL_MIN) _fc.fWheelFactor = FREECAM_WHEEL_MIN;
+          if (_fc.fWheelFactor > FREECAM_WHEEL_MAX) _fc.fWheelFactor = FREECAM_WHEEL_MAX;
+          ShowFreeCamStatus();
+        }
+        pmsg->message = WM_NULL;
+        break;
+      case WM_MOUSEMOVE:
+      case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
+      case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_RBUTTONDBLCLK:
+      case WM_MBUTTONDOWN: case WM_MBUTTONUP: case WM_MBUTTONDBLCLK:
+        if (IsInView(pmsg->hwnd)) pmsg->message = WM_NULL;
+        break;
+      }
+    }
+  }
+  return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+static void CALLBACK FreeCamTick(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
+{
+  CMasterViewer *pmv;
+  LARGE_INTEGER llNow;
+  POINT ptCenter, ptCursor;
+  float fDelta, fStep, vMove[3];
+  (void)uMsg; (void)idEvent; (void)dwTime;
+
+  if (!_fc.bActive || hwnd != _fc.hwndView) return;
+  /* leave when the view loses focus or stops being a perspective view */
+  if (!IsInView(GetFocus())
+   || *(int *)((char *)_fc.pView + WE_VIEW_PROJECTION) != WE_PROJECTION_PERSPECTIVE) {
+    ExitFreeCam();
+    return;
+  }
+  pmv = GetMasterViewer(_fc.pView);
+  if (pmv == NULL) { ExitFreeCam(); return; }
+
+  QueryPerformanceCounter(&llNow);
+  fDelta = (float)(llNow.QuadPart - _fc.llLastTick.QuadPart) / (float)_fc.llFrequency.QuadPart;
+  _fc.llLastTick = llNow;
+  if (fDelta > 0.1f) fDelta = 0.1f;
+
+  /* mouse look: measure how far the cursor moved from the view center, then re-center it */
+  ptCenter = GetViewCenter(_fc.hwndView);
+  GetCursorPos(&ptCursor);
+  if (ptCursor.x != ptCenter.x || ptCursor.y != ptCenter.y) {
+    float *pa = pmv->mv_plViewer.aOrientation;
+    pa[0] -= (ptCursor.x - ptCenter.x) * FREECAM_MOUSE_DEGREES;   /* heading: positive turns left */
+    pa[1] -= (ptCursor.y - ptCenter.y) * FREECAM_MOUSE_DEGREES;   /* pitch: positive looks up */
+    if (pa[0] >= 180.0f) pa[0] -= 360.0f;
+    if (pa[0] < -180.0f) pa[0] += 360.0f;
+    if (pa[1] > 90.0f) pa[1] = 90.0f;
+    if (pa[1] < -90.0f) pa[1] = -90.0f;
+    SetCursorPos(ptCenter.x, ptCenter.y);
+  }
+
+  /* WASD moves in the camera's own system (-Z is forward), Q/E go straight down/up */
+  fStep = _fc.fBaseSpeed * _fc.fWheelFactor * fDelta * (IsKeyDown(VK_SHIFT) ? FREECAM_FAST_FACTOR : 1.0f);
+  vMove[0] = (IsKeyDown('D') - IsKeyDown('A')) * fStep;
+  vMove[1] = 0.0f;
+  vMove[2] = (IsKeyDown('S') - IsKeyDown('W')) * fStep;
+  if (vMove[0] != 0.0f || vMove[2] != 0.0f) _pfnTranslateOwnSystem(&pmv->mv_plViewer, NULL, vMove);
+  pmv->mv_plViewer.vPosition[1] += (IsKeyDown('E') - IsKeyDown('Q')) * fStep;
+
+  KeepFreeCamStatus();
+
+  /* redraw this view now, the other three now and then */
+  InvalidateRect(_fc.hwndView, NULL, FALSE);
+  UpdateWindow(_fc.hwndView);
+  if ((llNow.QuadPart - _fc.llLastOtherViews.QuadPart) * 1000 > _fc.llFrequency.QuadPart * FREECAM_OTHERVIEWS_MS) {
+    _fc.llLastOtherViews = llNow;
+    UpdateAllViews(_fc.pView, _fc.pView);
+  }
+}
+
+static void EnterFreeCam(void *pView)
+{
+  HWND hwnd = *(HWND *)((char *)pView + WE_VIEW_HWND);
+  CMasterViewer *pmv = GetMasterViewer(pView);
+  POINT ptCenter;
+
+  if (_fc.bActive || !IsWindow(hwnd) || pmv == NULL) return;
+
+  _fc.fBaseSpeed = pmv->mv_fTargetDistance * FREECAM_SPEED_PER_DISTANCE;
+  if (!(_fc.fBaseSpeed >= FREECAM_BASE_SPEED_MIN)) _fc.fBaseSpeed = FREECAM_BASE_SPEED_MIN;   /* also catches NaN */
+  if (_fc.fBaseSpeed > FREECAM_BASE_SPEED_MAX) _fc.fBaseSpeed = FREECAM_BASE_SPEED_MAX;
+
+  _fc.hhkMessages = SetWindowsHookExA(WH_GETMESSAGE, FreeCamMessageHook, NULL, GetCurrentThreadId());
+  if (_fc.hhkMessages == NULL) return;
+  if (!SetTimer(hwnd, FREECAM_TIMER_ID, FREECAM_TICK_MS, FreeCamTick)) {
+    UnhookWindowsHookEx(_fc.hhkMessages);
+    _fc.hhkMessages = NULL;
+    return;
+  }
+
+  _fc.bActive = TRUE;
+  _fc.pView = pView;
+  _fc.hwndView = hwnd;
+  QueryPerformanceFrequency(&_fc.llFrequency);
+  QueryPerformanceCounter(&_fc.llLastTick);
+  _fc.llLastOtherViews = _fc.llLastTick;
+
+  GetCursorPos(&_fc.ptOldCursor);
+  ptCenter = GetViewCenter(hwnd);
+  SetCursorPos(ptCenter.x, ptCenter.y);
+  ClipCursorToView(hwnd);
+  ShowCursor(FALSE);
+
+  /* show the controls in the main window's status bar */
+  _fc.hwndStatusBar = GetDlgItem(GetAncestor(hwnd, GA_ROOT), AFX_IDW_STATUS_BAR);
+  _fc.strOldStatus[0] = 0;
+  if (_fc.hwndStatusBar != NULL) {
+    if (LOWORD(SendMessageA(_fc.hwndStatusBar, SB_GETTEXTLENGTHA, 0, 0)) < sizeof(_fc.strOldStatus)) {
+      SendMessageA(_fc.hwndStatusBar, SB_GETTEXTA, 0, (LPARAM)_fc.strOldStatus);
+    }
+    ShowFreeCamStatus();
+  }
+}
+
+static void ExitFreeCam(void)
+{
+  if (!_fc.bActive) return;
+  _fc.bActive = FALSE;
+
+  if (IsWindow(_fc.hwndView)) KillTimer(_fc.hwndView, FREECAM_TIMER_ID);
+  if (_fc.hhkMessages != NULL) {
+    UnhookWindowsHookEx(_fc.hhkMessages);
+    _fc.hhkMessages = NULL;
+  }
+  ShowCursor(TRUE);
+  ClipCursor(NULL);
+  SetCursorPos(_fc.ptOldCursor.x, _fc.ptOldCursor.y);
+
+  if (_fc.hwndStatusBar != NULL && IsWindow(_fc.hwndStatusBar)) {
+    SendMessageA(_fc.hwndStatusBar, SB_SETTEXTA, 0, (LPARAM)_fc.strOldStatus);
+  }
+  _fc.hwndStatusBar = NULL;
+
+  /* bring all views of the window up to date with the final camera position */
+  if (IsWindow(_fc.hwndView)) UpdateAllViews(_fc.pView, NULL);
+  _fc.pView = NULL;
+  _fc.hwndView = NULL;
+}
+
+/* Replaces CWorldEditorView::OnKeyDown in the view's message map. */
+static void __fastcall WorldEditorView_OnKeyDown(void *pView, void *pvEdx, UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+  (void)pvEdx;
+  if (nChar == VK_ESCAPE && !(nFlags & KF_REPEAT)) {
+    if (_fc.bActive) {
+      ExitFreeCam();
+      return;
+    }
+    if (*(int *)((char *)pView + WE_VIEW_PROJECTION) == WE_PROJECTION_PERSPECTIVE) {
+      EnterFreeCam(pView);
+      return;
+    }
+  }
+  ((View_OnKeyDown_t)WE_VIEW_ONKEYDOWN)(pView, NULL, nChar, nRepCnt, nFlags);
+}
+
+static void InstallFreeCam(HMODULE hEngine)
+{
+  if (!IsKnownWorldEditor()) return;
+  if (*WE_VIEW_KEYDOWN_ENTRY != WE_VIEW_ONKEYDOWN) return;
+
+  _pfnTranslateOwnSystem = (Placement_TranslateOwnSystem_t)GetProcAddress(hEngine,
+    "?Translate_OwnSystem@CPlacement3D@@QAEXABV?$Vector@M$02@@@Z");
+  if (_pfnTranslateOwnSystem == NULL) return;
+
+  _bFreeCamInstalled = SetVTableSlot(WE_VIEW_KEYDOWN_ENTRY, (void *)WorldEditorView_OnKeyDown);
+}
+
+static void UninstallFreeCam(void)
+{
+  ExitFreeCam();
+  if (_bFreeCamInstalled) {
+    SetVTableSlot(WE_VIEW_KEYDOWN_ENTRY, WE_VIEW_ONKEYDOWN);
+    _bFreeCamInstalled = FALSE;
+  }
+}
+
+
+/* ---------------------------------------------------------------------- */
 
 BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD dwReason, LPVOID pvReserved)
 {
@@ -309,11 +649,13 @@ BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD dwReason, LPVOID pvReserved)
     if (hEngine != NULL) {
       InstallStreamFix(hEngine);
       InstallSaveFix(hEngine);
+      InstallFreeCam(hEngine);
     }
     break;
   case DLL_PROCESS_DETACH:
     /* At process exit (pvReserved != NULL) skip cleanup: Engine.dll may already be gone. */
     if (pvReserved == NULL) {
+      UninstallFreeCam();
       UninstallSaveFix();
       UninstallStreamFix();
     } else {

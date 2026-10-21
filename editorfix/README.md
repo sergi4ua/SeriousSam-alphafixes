@@ -15,6 +15,14 @@ SamAlphaFix.dll will fix the following errors:
 
 
 
+SamAlphaFix.dll adds the following features:
+
+
+
+* Adds free cam mode (use ESC key and WASD keys to control the camera)
+
+
+
 Installation instructions:
 
 
