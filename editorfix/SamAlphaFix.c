@@ -63,6 +63,21 @@
  * map entry is redirected here.  While flying, a WH_GETMESSAGE hook keeps
  * W/A/S/D/Q/E from triggering the editor's accelerators and keeps the mouse
  * away from the view's own handlers.
+ *
+ *
+ * 4. Crash at startup when the released Serious Sam editor was used before
+ * =========================================================================
+ * The main window saves and restores its toolbar layout with MFC's
+ * SaveBarState/LoadBarState("General") under HKCU\Software\CroTeam\WorldEditor,
+ * the same registry key the released Serious Sam editor uses.  Its toolbars
+ * have other IDs, and MFC's SetDockState uses GetControlBar(nBarID) without a
+ * NULL check, so loading that editor's layout crashes in MFC42.DLL at
+ * 5F40D84D (called from 0x0041BB5A).
+ *
+ * Fix: the alpha's layout goes to its own section, "Alpha toolbars", for both
+ * saving and loading, so neither editor reads the other's layout.  Before
+ * loading, every saved bar ID is checked against the bars that exist; an
+ * unusable layout is skipped and the default toolbar layout is used.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -637,6 +652,166 @@ static void UninstallFreeCam(void)
 
 
 /* ---------------------------------------------------------------------- */
+/* 4. Toolbar layout shared with the released editor                       */
+/* ---------------------------------------------------------------------- */
+
+/* CMainFrame keeps its toolbar layout with LoadBarState/SaveBarState("General")
+   under HKCU\Software\CroTeam\WorldEditor, the same key the released Serious
+   Sam editor uses.  MFC's SetDockState doesn't check for bar IDs that don't
+   exist ("toolbar id's probably changed"), so a layout saved by that editor
+   crashes this one in MFC42.DLL (5F40D84D) right after startup. */
+#define WE_LOADBAR_PUSH         ((BYTE *)0x0041BB53)   /* push offset "General" */
+#define WE_LOADBAR_CALL         ((BYTE *)0x0041BB5A)   /* call CFrameWnd::LoadBarState */
+#define WE_SAVEBAR_PUSH         ((BYTE *)0x0041CBDA)   /* push offset "General" */
+#define WE_LOADBARSTATE         ((void *)0x004503D8)   /* CFrameWnd::LoadBarState thunk */
+#define WE_AFXGETMODULESTATE    ((void *)0x00450270)   /* AfxGetModuleState thunk */
+#define WE_GETPROFILEINT        ((void *)0x004504CE)   /* CWinApp::GetProfileInt thunk */
+#define WE_MODULESTATE_APP      4                      /* AFX_MODULE_STATE::m_pCurrentWinApp */
+#define MAX_SAVED_BARS          256
+
+typedef void  (__fastcall *Frame_LoadBarState_t)(void *pFrame, void *pvEdx, const char *strProfileName);
+typedef void *(__cdecl *AfxGetModuleState_t)(void);
+typedef UINT  (__fastcall *App_GetProfileInt_t)(void *pApp, void *pvEdx, const char *strSection, const char *strEntry, int iDefault);
+
+/* The alpha's own section name, so neither editor reads the other's layout. */
+static const char _strBarSection[] = "Alpha toolbars";
+
+static const BYTE _aubLoadPushOld[5] = { 0x68, 0x1C, 0xCA, 0x46, 0x00 };
+static const BYTE _aubLoadCallOld[5] = { 0xE8, 0x79, 0x48, 0x03, 0x00 };
+static const BYTE _aubSavePushOld[5] = { 0x68, 0x24, 0xD0, 0x46, 0x00 };
+static BOOL _bBarStateFixInstalled = FALSE;
+static BOOL _bBarStateCodeTouched = FALSE;     /* some bytes may have been written */
+
+static BOOL WriteCode(BYTE *pubCode, const BYTE *pubNew, size_t ctBytes)
+{
+  DWORD dwOldProtect;
+  if (!VirtualProtect(pubCode, ctBytes, PAGE_EXECUTE_READWRITE, &dwOldProtect)) return FALSE;
+  memcpy(pubCode, pubNew, ctBytes);
+  VirtualProtect(pubCode, ctBytes, dwOldProtect, &dwOldProtect);
+  FlushInstructionCache(GetCurrentProcess(), pubCode, ctBytes);
+  return TRUE;
+}
+
+typedef struct {
+  HWND hwndFrame;
+  UINT nID;
+  BOOL bFound;
+} BarSearch;
+
+static BOOL CALLBACK FindBarInChildren(HWND hwnd, LPARAM lParam)
+{
+  BarSearch *pbs = (BarSearch *)lParam;
+  if ((UINT)GetDlgCtrlID(hwnd) == pbs->nID) pbs->bFound = TRUE;
+  return !pbs->bFound;
+}
+
+static BOOL CALLBACK FindBarInThreadWindows(HWND hwnd, LPARAM lParam)
+{
+  BarSearch *pbs = (BarSearch *)lParam;
+  /* the main frame, or one of its floating toolbar frames */
+  if (hwnd == pbs->hwndFrame || GetWindow(hwnd, GW_OWNER) == pbs->hwndFrame) {
+    EnumChildWindows(hwnd, FindBarInChildren, lParam);
+  }
+  return !pbs->bFound;
+}
+
+/* Same answer as CFrameWnd::GetControlBar(nID) != NULL: control bars are
+   windows with the bar ID as their control ID. */
+static BOOL FrameHasControlBar(HWND hwndFrame, UINT nID)
+{
+  BarSearch bs;
+  bs.hwndFrame = hwndFrame;
+  bs.nID = nID;
+  bs.bFound = FALSE;
+  EnumThreadWindows(GetCurrentThreadId(), FindBarInThreadWindows, (LPARAM)&bs);
+  return bs.bFound;
+}
+
+/* Read the layout the way CDockState::LoadState does and check that every
+   docked bar it names exists, before MFC gets to use it. */
+static BOOL IsBarStateUsable(void *pFrame, const char *strSection)
+{
+  HWND hwndFrame = *(HWND *)((char *)pFrame + WE_VIEW_HWND);
+  void *pModuleState = ((AfxGetModuleState_t)WE_AFXGETMODULESTATE)();
+  void *pApp = (pModuleState != NULL) ? *(void **)((char *)pModuleState + WE_MODULESTATE_APP) : NULL;
+  App_GetProfileInt_t pfnGetProfileInt = (App_GetProfileInt_t)WE_GETPROFILEINT;
+  char strKey[128], strEntry[32];
+  int ctBars, iBar, ctIDs, iID;
+
+  if (pApp == NULL || !IsWindow(hwndFrame)) return FALSE;
+
+  wsprintfA(strKey, "%s-Summary", strSection);
+  ctBars = (int)pfnGetProfileInt(pApp, NULL, strKey, "Bars", 0);
+  if (ctBars <= 0) return TRUE;                  /* nothing saved yet */
+  if (ctBars > MAX_SAVED_BARS) return FALSE;
+
+  for (iBar = 0; iBar < ctBars; iBar++) {
+    wsprintfA(strKey, "%s-Bar%d", strSection, iBar);
+    /* floating bars get a new frame from MFC; only docked ones are looked up */
+    if (!pfnGetProfileInt(pApp, NULL, strKey, "Floating", FALSE)
+     && !FrameHasControlBar(hwndFrame, pfnGetProfileInt(pApp, NULL, strKey, "BarID", 0))) {
+      return FALSE;
+    }
+    /* bars listed inside a dock bar; a non-zero high word marks a placeholder */
+    ctIDs = (int)pfnGetProfileInt(pApp, NULL, strKey, "Bars", 0);
+    if (ctIDs < 0 || ctIDs > MAX_SAVED_BARS) return FALSE;
+    for (iID = 0; iID < ctIDs; iID++) {
+      UINT nID;
+      wsprintfA(strEntry, "Bar#%d", iID);
+      nID = pfnGetProfileInt(pApp, NULL, strKey, strEntry, 0);
+      if (nID != 0 && HIWORD(nID) == 0 && !FrameHasControlBar(hwndFrame, nID)) return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/* Replaces the CMainFrame call to LoadBarState(). An unusable layout is
+   skipped, so the editor starts with its default toolbar layout instead. */
+static void __fastcall MainFrame_LoadBarState(void *pFrame, void *pvEdx, const char *strSection)
+{
+  (void)pvEdx;
+  if (IsBarStateUsable(pFrame, strSection)) {
+    ((Frame_LoadBarState_t)WE_LOADBARSTATE)(pFrame, NULL, strSection);
+  }
+}
+
+static void InstallBarStateFix(void)
+{
+  BYTE aubPush[5], aubCall[5];
+  DWORD dwSection = (DWORD)(DWORD_PTR)_strBarSection;
+  LONG slRelative = (LONG)((DWORD_PTR)MainFrame_LoadBarState - (DWORD_PTR)(WE_LOADBAR_CALL + 5));
+
+  if (!IsKnownWorldEditor()) return;
+  if (memcmp(WE_LOADBAR_PUSH, _aubLoadPushOld, 5) != 0
+   || memcmp(WE_LOADBAR_CALL, _aubLoadCallOld, 5) != 0
+   || memcmp(WE_SAVEBAR_PUSH, _aubSavePushOld, 5) != 0) {
+    return;
+  }
+
+  aubPush[0] = 0x68;                             /* push offset _strBarSection */
+  memcpy(aubPush + 1, &dwSection, 4);
+  aubCall[0] = 0xE8;                             /* call MainFrame_LoadBarState */
+  memcpy(aubCall + 1, &slRelative, 4);
+
+  _bBarStateCodeTouched = TRUE;
+  _bBarStateFixInstalled = WriteCode(WE_SAVEBAR_PUSH, aubPush, 5)
+                        && WriteCode(WE_LOADBAR_PUSH, aubPush, 5)
+                        && WriteCode(WE_LOADBAR_CALL, aubCall, 5);
+}
+
+static void UninstallBarStateFix(void)
+{
+  /* restore all three, also after a partial install */
+  if (!_bBarStateCodeTouched) return;
+  if (memcmp(WE_SAVEBAR_PUSH, _aubSavePushOld, 5) != 0) WriteCode(WE_SAVEBAR_PUSH, _aubSavePushOld, 5);
+  if (memcmp(WE_LOADBAR_PUSH, _aubLoadPushOld, 5) != 0) WriteCode(WE_LOADBAR_PUSH, _aubLoadPushOld, 5);
+  if (memcmp(WE_LOADBAR_CALL, _aubLoadCallOld, 5) != 0) WriteCode(WE_LOADBAR_CALL, _aubLoadCallOld, 5);
+  _bBarStateFixInstalled = FALSE;
+  _bBarStateCodeTouched = FALSE;
+}
+
+
+/* ---------------------------------------------------------------------- */
 
 BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD dwReason, LPVOID pvReserved)
 {
@@ -650,11 +825,13 @@ BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD dwReason, LPVOID pvReserved)
       InstallStreamFix(hEngine);
       InstallSaveFix(hEngine);
       InstallFreeCam(hEngine);
+      InstallBarStateFix();
     }
     break;
   case DLL_PROCESS_DETACH:
     /* At process exit (pvReserved != NULL) skip cleanup: Engine.dll may already be gone. */
     if (pvReserved == NULL) {
+      UninstallBarStateFix();
       UninstallFreeCam();
       UninstallSaveFix();
       UninstallStreamFix();

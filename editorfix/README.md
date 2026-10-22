@@ -12,6 +12,7 @@ SamAlphaFix.dll will fix the following errors:
 
 * ACCESS\_VIOLATION exception that occurs on 64-bit Windows systems due to a unwinding error.
 * "Saving is disabled in this version!" when saving a world.
+* Crash on startup due to conflict with TFE/TSE toolbar settings
 
 
 
