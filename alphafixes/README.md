@@ -43,17 +43,23 @@ PLEASE NOTE: the game fixes are currently not working in the editor.
 ```
 
 
-
 Please report any bugs/glitches/etc. to the issue tracker.
 
+
 Credits:
+
 Created by Sergi4UA
+
 Testers: Biktim, Jarmen
+
 MinHook by Tsuda Kageyu
 
 Discord: Sergi4UA
+
 Telegram: https://t.me/sergi4uaworkshop
+
 YouTube: https://youtube.com/user/Sergi4UA
+
 Part of the Serious Sam Hyper Server and Serious Sam Community on Telegram: https://t.me/Serious_Sam_Hyper_Server
 
 Enjoy :)
