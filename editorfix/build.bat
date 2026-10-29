@@ -1,5 +1,5 @@
 @echo off
-rem Builds SamAlphaFix.dll and PatchWorldEditor.exe (32-bit) with Visual C++.
+rem Builds SamAlphaEditorFixes.dll, PatchWorldEditor.exe and obj2lwo.exe (32-bit) with Visual C++.
 rem Run from a "x86 Native Tools Command Prompt", or let this script find vcvars32.bat.
 setlocal
 cd /d "%~dp0"
@@ -17,10 +17,12 @@ if errorlevel 1 goto :nocl
 
 :build
 if not exist build mkdir build
-cl /nologo /O2 /W4 /MT /LD SamAlphaFix.c /Fobuild\ /Febuild\SamAlphaFix.dll /link /NOLOGO || exit /b 1
+cl /nologo /O2 /W4 /MT /LD /D_CRT_SECURE_NO_WARNINGS SamAlphaEditorFixes.c ObjImport.c /Fobuild\ /Febuild\SamAlphaEditorFixes.dll /link /NOLOGO || exit /b 1
 cl /nologo /O2 /W4 /MT /D_CRT_SECURE_NO_WARNINGS PatchWorldEditor.c /Fobuild\ /Febuild\PatchWorldEditor.exe /link /NOLOGO /MANIFEST:EMBED /MANIFESTUAC:"level='asInvoker' uiAccess='false'" || exit /b 1
+cl /nologo /O2 /W4 /MT /D_CRT_SECURE_NO_WARNINGS obj2lwo.c ObjImport.c /Fobuild\ /Febuild\obj2lwo.exe /link /NOLOGO || exit /b 1
+del build\*.obj build\*.exp build\*.lib 2>nul
 echo.
-echo Built build\SamAlphaFix.dll and build\PatchWorldEditor.exe
+echo Built build\SamAlphaEditorFixes.dll, build\PatchWorldEditor.exe and build\obj2lwo.exe
 exit /b 0
 
 :nocl

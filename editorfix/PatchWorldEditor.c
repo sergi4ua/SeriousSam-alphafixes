@@ -1,6 +1,7 @@
 /*
  * PatchWorldEditor - patches the Serious Sam alpha WorldEditor.exe (build of
- * 13 Jan 2000) to load SamAlphaFix.dll at startup.  See SamAlphaFix.c for why.
+ * 13 Jan 2000) to load SamAlphaEditorFixes.dll at startup.  See
+ * SamAlphaEditorFixes.c for why.
  *
  * Usage:  PatchWorldEditor [path\to\WorldEditor.exe]
  *         Without a path it looks for WorldEditor.exe next to the patcher,
@@ -8,7 +9,9 @@
  *         dropped onto the patcher in Explorer.
  *
  * The original file is kept as WorldEditor.exe.orig.  Running the patcher on an
- * already patched file does nothing.
+ * already patched file does nothing.  An exe patched by an older version, which
+ * loads SamAlphaFix.dll (the DLL's earlier name), is updated to load
+ * SamAlphaEditorFixes.dll.
  *
  * The result is printed to the console.  If the patcher has a console of its
  * own (started from Explorer), the result is shown in a message box instead,
@@ -28,16 +31,16 @@
  *
  * 2. Code cave in the unused tail of .text, at 0x00456F00:
  *      FF 15 5C 71 45 00   call [__imp_CTStream::EnableStreamHandling]
- *      68 20 6F 45 00      push offset szFixDll      ; "SamAlphaFix.dll"
+ *      68 20 6F 45 00      push offset szFixDll      ; "SamAlphaEditorFixes.dll"
  *      FF 15 1C 76 45 00   call [__imp_LoadLibraryA]
  *      C3                  ret
- *    00456F20: "SamAlphaFix.dll",0
+ *    00456F20: "SamAlphaEditorFixes.dll",0
  *
  * 3. .text VirtualSize grows from 0x55EF5 to 0x56000 so the cave is inside
  *    the section (the raw data already covers it).
  *
- * If SamAlphaFix.dll is missing, LoadLibraryA just fails and the editor runs as
- * before.
+ * If SamAlphaEditorFixes.dll is missing, LoadLibraryA just fails and the editor
+ * runs as before.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -49,6 +52,9 @@
 #include <string.h>
 
 #pragma comment(lib, "user32.lib")
+
+#define FIX_DLL_NAME    "SamAlphaEditorFixes.dll"
+#define OLDER_DLL_NAME  "SamAlphaFix.dll"      /* the DLL's name up to October 2026 */
 
 typedef struct {
   long          lOffset;   /* file offset */
@@ -73,12 +79,15 @@ static const Patch _apatches[] = {
       0x68, 0x20, 0x6F, 0x45, 0x00,
       0xFF, 0x15, 0x1C, 0x76, 0x45, 0x00,
       0xC3 } },
-  /* DLL name */
-  { 0x56F20, 16,
+  /* DLL name (last entry, see IsOlderPatch) */
+  { 0x56F20, 24,
     { 0 },
-    "SamAlphaFix.dll" },
+    FIX_DLL_NAME },
 };
 #define CT_PATCHES (sizeof(_apatches) / sizeof(_apatches[0]))
+
+/* the DLL name written by older versions of this patcher, padded like the entry above */
+static const unsigned char _aubOlderDllName[24] = OLDER_DLL_NAME;
 
 #define EXPECTED_SIZE      606208L
 #define TIMESTAMP_OFFSET   0x100L       /* PE header (0xF8) + 8 */
@@ -159,15 +168,34 @@ static void ReportDllStatus(const char *strFile)
   pchSlash = strrchr(strDll, '\\');
   if (pchSlash != NULL) pchSlash[1] = 0;
   else strDll[0] = 0;
-  if ((size_t)lstrlenA(strDll) + sizeof("SamAlphaFix.dll") > sizeof(strDll)) return;
-  lstrcatA(strDll, "SamAlphaFix.dll");
+  if ((size_t)lstrlenA(strDll) + sizeof(FIX_DLL_NAME) > sizeof(strDll)) return;
+  lstrcatA(strDll, FIX_DLL_NAME);
 
   if (FileExists(strDll)) {
-    Report("\nSamAlphaFix.dll is in place, the editor is ready to use.\n");
+    Report("\n" FIX_DLL_NAME " is in place, the editor is ready to use.\n");
   } else {
-    Report("\nSamAlphaFix.dll is not there yet. Copy it to\n'%s'\n"
+    Report("\n" FIX_DLL_NAME " is not there yet. Copy it to\n'%s'\n"
            "or the fixes won't be active.\n", strDll);
   }
+
+  /* the old DLL is no longer loaded */
+  pchSlash = strrchr(strDll, '\\');
+  if (pchSlash != NULL) {
+    pchSlash[1] = 0;
+    lstrcatA(strDll, OLDER_DLL_NAME);
+    if (FileExists(strDll)) Report("\nThe old " OLDER_DLL_NAME " is not used any more, you can delete it.\n");
+  }
+}
+
+/* Patched by an older version: everything in place except the DLL name. */
+static int IsOlderPatch(const unsigned char *pubFile)
+{
+  size_t i;
+  for (i = 0; i + 1 < CT_PATCHES; i++) {
+    const Patch *pp = &_apatches[i];
+    if (!Matches(pubFile + pp->lOffset, pp->aubNew, pp->ctBytes)) return 0;
+  }
+  return Matches(pubFile + _apatches[CT_PATCHES - 1].lOffset, _aubOlderDllName, sizeof(_aubOlderDllName));
 }
 
 int main(int argc, char *argv[])
@@ -178,7 +206,7 @@ int main(int argc, char *argv[])
   FILE *f;
   long slSize;
   size_t i;
-  int bAllOld = 1, bAllNew = 1;
+  int bAllOld = 1, bAllNew = 1, bOlderPatch;
 
   if (argc > 1) {
     if (GetFullPathNameA(argv[1], sizeof(strFile), strFile, NULL) == 0) {
@@ -228,16 +256,19 @@ int main(int argc, char *argv[])
     ReportDllStatus(strFile);
     return Finish(0);
   }
-  if (!bAllOld) {
+  bOlderPatch = IsOlderPatch(pubFile);
+  if (!bAllOld && !bOlderPatch) {
     Report("'%s' does not contain the expected bytes.\n\nIt may have been modified by another patch, "
            "nothing was changed.\n", strFile);
     return Finish(1);
   }
 
-  /* back up the original */
+  /* back up the original (an older patch already did, from the unpatched file) */
   _snprintf(strBackup, sizeof(strBackup) - 1, "%s.orig", strFile);
   strBackup[sizeof(strBackup) - 1] = 0;
-  if (FileExists(strBackup)) {
+  if (bOlderPatch) {
+    /* nothing to back up */
+  } else if (FileExists(strBackup)) {
     Report("Backup '%s' already exists, leaving it as is.\n", strBackup);
   } else {
     f = fopen(strBackup, "wb");
@@ -267,7 +298,12 @@ int main(int argc, char *argv[])
   }
   free(pubFile);
 
-  Report("'%s' patched successfully.\n", strFile);
+  if (bOlderPatch) {
+    Report("'%s' was patched by an older version. It now loads " FIX_DLL_NAME
+           " instead of " OLDER_DLL_NAME ".\n", strFile);
+  } else {
+    Report("'%s' patched successfully.\n", strFile);
+  }
   ReportDllStatus(strFile);
   return Finish(0);
 }

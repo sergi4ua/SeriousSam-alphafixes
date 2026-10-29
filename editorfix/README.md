@@ -21,6 +21,7 @@ SamAlphaFix.dll adds the following features:
 
 
 * Adds free cam mode (use ESC key and WASD keys to control the camera)
+* OBJ file import (will use game textures if specified in mesh)
 
 
 
