@@ -116,6 +116,11 @@ void LoadConfig()
   g_cfg.bWheelWeapons = ReadInt("Weapons", "MouseWheel", def.bWheelWeapons) != 0;
   g_cfg.bWheelInvert = ReadInt("Weapons", "InvertWheel", def.bWheelInvert) != 0;
   g_cfg.bWeaponBar = ReadInt("Weapons", "WeaponBar", def.bWeaponBar) != 0;
+  g_cfg.bFixedCrosshair = ReadInt("Weapons", "FixedCrosshair", def.bFixedCrosshair) != 0;
+
+  g_cfg.iMasterVolume = ReadInt("Sound", "MasterVolume", def.iMasterVolume);
+  if (g_cfg.iMasterVolume < 0 || g_cfg.iMasterVolume > 16) g_cfg.iMasterVolume = def.iMasterVolume;
+  g_cfg.bSoftClipping = ReadInt("Sound", "SoftClipping", def.bSoftClipping) != 0;
 
   g_cfg.bVSync = ReadInt("Graphics", "VSync", def.bVSync) != 0;
   g_cfg.iAnisotropy = ReadInt("Graphics", "Anisotropy", def.iAnisotropy);
@@ -159,6 +164,10 @@ void SaveConfig()
   WriteInt("Weapons", "MouseWheel", g_cfg.bWheelWeapons);
   WriteInt("Weapons", "InvertWheel", g_cfg.bWheelInvert);
   WriteInt("Weapons", "WeaponBar", g_cfg.bWeaponBar);
+  WriteInt("Weapons", "FixedCrosshair", g_cfg.bFixedCrosshair);
+
+  WriteInt("Sound", "MasterVolume", g_cfg.iMasterVolume);
+  WriteInt("Sound", "SoftClipping", g_cfg.bSoftClipping);
 
   WriteInt("Graphics", "VSync", g_cfg.bVSync);
   WriteInt("Graphics", "Anisotropy", g_cfg.iAnisotropy);

@@ -46,6 +46,7 @@ void UpdateLateHooks()
   InstallLightFixEntitiesHooks(hEntities);
   InstallCannonEntitiesPatches();
   InstallWeaponsEntitiesHooks();
+  InstallCrosshairEntitiesHooks();
 }
 
 extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
@@ -71,6 +72,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   InstallTextFixes();
   InstallGameSettingsFile();
   InstallGraphicsOptions();
+  InstallSoundFixes();
   Log("In-game menu: %s", InstallInGameMenu() ? "ok" : "failed");
 #if AF_TEST_AIDS
   InstallTestAids();

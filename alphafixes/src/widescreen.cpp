@@ -94,9 +94,8 @@ float DegToRad(float f) { return f * 3.14159265f / 180.0f; }
 float RadToDeg(float f) { return f * 180.0f / 3.14159265f; }
 
 // Widens a perspective projection for this call; returns the FOV to restore, or NAN.
-float WidenProjection(void *papr, bool bUserFov)
+float WidenPerspective(char *pr, bool bUserFov)
 {
-  char *pr = *(char **)((char *)papr + APR_CURRENT_PROJECTION);
   if (pr == nullptr || *(void **)pr != _pvtblPerspective) return NAN;
 
   const float *pfBox = (const float *)(pr + PR_SCREEN_BBOX);
@@ -122,6 +121,11 @@ float WidenProjection(void *papr, bool bUserFov)
   if (fFov == fOld) return NAN;
   *pfFov = fFov;
   return fOld;
+}
+
+float WidenProjection(void *papr, bool bUserFov)
+{
+  return WidenPerspective(*(char **)((char *)papr + APR_CURRENT_PROJECTION), bUserFov);
 }
 
 void RestoreProjection(void *papr, float fOld)
@@ -286,3 +290,17 @@ void InstallWidescreenEntitiesHooks(HMODULE hEntities)
 }
 
 float LastViewAspect() { return _fLastAspect; }
+
+// The crosshair projects what the weapon aims at with the player's view
+// projection (a CPerspectiveProjection3D), after the view was drawn; it has to
+// be widened like the view, or everything off the middle of the screen lands
+// too far out (by 1.9 times at 16:9 with a 110 degree FOV).
+float WidenPlayerProjection(void *pr)
+{
+  return WidenPerspective((char *)pr, true);
+}
+
+void RestorePlayerProjection(void *pr, float fOld)
+{
+  if (!std::isnan(fOld)) *(float *)((char *)pr + PR_FOV_WIDTH) = fOld;
+}

@@ -251,6 +251,7 @@ void InstallGraphicsOptions()
 void UpdateGraphicsOptions()
 {
   *gfx_fVSyncsToWait = g_cfg.bVSync ? 1.0f : 0.0f;
+  UpdateCrosshair();
 }
 
 // The engine deleted its GL context: texture names start over in the next one.

@@ -224,6 +224,17 @@ void GraphicsSection()
   HelpMarker("Smooths the edges of polygons.  Changing it resets the video mode.");
 }
 
+void SoundSection()
+{
+  ImGui::SliderInt("Master volume", &g_cfg.iMasterVolume, 0, 16, "%d / 16");
+  HelpMarker("The same as Options > Audio options > Master volume.  8 is the original level.");
+  ImGui::SameLine();
+  if (ImGui::SmallButton("8")) g_cfg.iMasterVolume = 8;
+  ImGui::Checkbox("Soft clipping", &g_cfg.bSoftClipping);
+  HelpMarker("Rounds off the loudest peaks instead of clipping them hard, so many loud sounds "
+             "at once don't distort.  Off: a plain clamp, like the original.");
+}
+
 void WidescreenSection()
 {
   ImGui::Checkbox("Hor+ field of view", &g_cfg.bHorPlusFov);
@@ -243,7 +254,7 @@ void WidescreenSection()
   float fVer = FullAngle(TanHalf(fHor) / fAspect);
   ImGui::TextDisabled("View %.2f:1 -> %.1f deg horizontal, %.1f deg vertical", fAspect, fHor, fVer);
   ImGui::Checkbox("Size the HUD by screen height", &g_cfg.bFixHud);
-  HelpMarker("The game sizes the HUD by screen width, which makes it too big on wide screens.");
+  HelpMarker("The game sizes the HUD and the crosshair by screen width, which makes them too big on wide screens.");
   ImGui::Checkbox("Keep the menu 4:3", &g_cfg.bMenu43);
   HelpMarker("Draws the menu in a 4:3 area in the middle of the screen instead of stretching it.");
 }
@@ -268,10 +279,13 @@ void MouseSection()
              "This draws the view where the game is about to turn it, so it follows the mouse at once.  "
              "Aiming and shooting are unchanged.");
   ImGui::Checkbox("Mouse wheel switches weapons", &g_cfg.bWheelWeapons);
-  HelpMarker("Wheel down: next weapon, wheel up: previous, among the weapons you have ammo for.");
+  HelpMarker("Wheel up: next weapon, wheel down: previous (Invert swaps them), among the weapons you have ammo for.");
   ImGui::SameLine();
   ImGui::Checkbox("Invert", &g_cfg.bWheelInvert);
   ImGui::Checkbox("Show the weapons in the HUD when switching", &g_cfg.bWeaponBar);
+  ImGui::Checkbox("Fixed crosshair", &g_cfg.bFixedCrosshair);
+  HelpMarker("Keeps the crosshair in the middle of the screen.  The game moves it to where the weapon's "
+             "ray hits, so it jumps around near walls and edges.  Size and colour still show what you aim at.");
   ImGui::TextDisabled("Raw mouse events received: %ld", PeekRawMouseCount());
 }
 
@@ -297,6 +311,7 @@ void BuildUi()
       if (ImGui::CollapsingHeader("Display")) DisplaySection();
       ImGui::SetNextItemOpen(true, ImGuiCond_Once);
       if (ImGui::CollapsingHeader("Graphics")) GraphicsSection();
+      if (ImGui::CollapsingHeader("Sound")) SoundSection();
       ImGui::SetNextItemOpen(true, ImGuiCond_Once);
       if (ImGui::CollapsingHeader("Widescreen")) WidescreenSection();
       ImGui::SetNextItemOpen(true, ImGuiCond_Once);
@@ -488,6 +503,7 @@ BOOL WINAPI SwapBuffers_Hook(HDC hdc)
   UpdateFrameTime();
   UpdateLateHooks();
   UpdateGraphicsOptions();
+  UpdateSound();
   bool bScreenshot = ScreenshotRequested();
   if (_bImGuiReady && (_bVisible || g_cfg.bShowFps || bScreenshot)) DrawOverlay(hdc, bScreenshot);
   return _pfnSwapBuffers(hdc);

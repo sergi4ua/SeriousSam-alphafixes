@@ -10,8 +10,8 @@
 #include <vector>
 
 #define AF_TITLE "AlphaFixes"
-#define AF_VERSION "0.5pt1"
-#define AF_AUTHOR "92bakota"
+#define AF_VERSION "0.5pt2"
+#define AF_AUTHOR "Sergi4UA"
 
 // Testing aids are built only with the CMake option AF_TEST_AIDS (build.bat test).
 #ifndef AF_TEST_AIDS
@@ -55,8 +55,13 @@ struct Config {
 
   // [Weapons]
   bool  bWheelWeapons = true;          // the mouse wheel switches weapons (see weapons.cpp)
-  bool  bWheelInvert = false;          // wheel up for the next weapon instead of wheel down
+  bool  bWheelInvert = false;          // wheel down for the next weapon instead of wheel up
   bool  bWeaponBar = true;             // show the player's weapons in the HUD when switching
+  bool  bFixedCrosshair = false;       // crosshair in the middle of the screen (see crosshair.cpp)
+
+  // [Sound]
+  int   iMasterVolume = 8;             // the Audio options slider: 0..16, 8 = the original level (see sound.cpp)
+  bool  bSoftClipping = true;          // round off the loudest peaks of the mix instead of clipping them
 
   // [Graphics]
   bool  bVSync = false;                // wait for the monitor's refresh (see graphics.cpp)
@@ -126,6 +131,8 @@ void UpdateLateHooks();                       // hooks Entities.dll once the eng
 bool InstallWidescreenFixes();
 void InstallWidescreenEntitiesHooks(HMODULE hEntities);
 float LastViewAspect();
+float WidenPlayerProjection(void *pr);        // CProjection3D: returns the FOV to restore (or NAN)
+void RestorePlayerProjection(void *pr, float fOld);
 
 // mouse.cpp
 bool InstallMouseFixes();
@@ -158,10 +165,18 @@ void InstallGraphicsOptions();
 void UpdateGraphicsOptions();                 // every frame
 void ForgetGLContext();                       // the engine deleted its GL context
 
+// crosshair.cpp
+void InstallCrosshairEntitiesHooks();
+void UpdateCrosshair();                       // every frame: picks up setting changes
+
 // weapons.cpp
 void AddMouseWheel(int iDelta);               // Raw Input thread
 void PutWheelInAction(char *pAction);         // after CControls::CreateAction
 void InstallWeaponsEntitiesHooks();
+
+// sound.cpp
+void InstallSoundFixes();
+void UpdateSound();                           // every frame
 
 // settingsfile.cpp
 void InstallGameSettingsFile();

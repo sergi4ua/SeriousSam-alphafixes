@@ -300,6 +300,9 @@ constexpr size_t EN_LASTPLACEMENT_ANGLES = 0x17C;      // en_plLastPlacement (+0
 constexpr size_t PL_VIEW_ANGLES = 0x2D0;               // eye placement relative to the body (+0x2C4)
 constexpr size_t PL_LASTVIEW_ANGLES = 0x2E8;           // the same before the last action (+0x2DC)
 constexpr size_t PL_VIEWMODE = 0x330;                  // 0: first person
+constexpr size_t PL_WEAPONS = 0x320;                   // its CPlayerWeapons: weapon in hand at +0xDC
+constexpr size_t PL_BUTTONS = 0x900;                   // buttons held in the action it applies; fire = 0x80000000
+constexpr int WEAPON_GHOSTBUSTER = 15;
 // CPlayerAction: pa_aRotation (heading, pitch, banking) in degrees per second
 constexpr size_t PA_ROTATION = 0xC;
 // CControls: axis actions of 0x14 bytes from +0x10: axis, sensitivity, invert, relative, influence
@@ -333,6 +336,8 @@ std::deque<QueuedTurn> _aqTurns;                       // actions built, not yet
 float _fHeadingPerX = 0.0f, _fHeadingPerY = 0.0f;
 float _fPitchPerX = 0.0f, _fPitchPerY = 0.0f;
 char *_penViewer = nullptr;                            // the player whose view is drawn
+float _fLookShare = 1.0f;                              // how much of the correction is shown (see the ghostbuster)
+DWORD _tmLastView = 0;
 
 float NormalizeAngle(float f)
 {
@@ -435,6 +440,20 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
   if (*(int *)(pen + EN_RENDERTYPE) != 3 || !(*(ULONG *)(pen + EN_FLAGS) & 8) || *(int *)(pen + PL_VIEWMODE) != 0) return;
   if (_ctActionsLastTick > 1 || IsPaused()) return;    // split screen: the mouse isn't the only one turning
 
+  // The ghostbuster's ray and its glow are world objects aimed with the game's
+  // view, drawn interpolated like the rest of the world; ahead of them, the
+  // corrected view made them trail behind the weapon while turning.  While it
+  // fires, the correction fades out over 0.15 s, and back in afterwards.
+  char *ppw = *(char **)(pen + PL_WEAPONS);
+  bool bRay = ppw != nullptr && *(int *)(ppw + 0xDC) == WEAPON_GHOSTBUSTER && (*(ULONG *)(pen + PL_BUTTONS) & 0x80000000);
+  DWORD tmNow = GetTickCount();
+  float fElapsed = (tmNow - _tmLastView) / 1000.0f;
+  _tmLastView = tmNow;
+  if (fElapsed > 0.1f) fElapsed = 0.1f;
+  _fLookShare += (bRay ? -fElapsed : fElapsed) / 0.15f;
+  _fLookShare = _fLookShare < 0.0f ? 0.0f : (_fLookShare > 1.0f ? 1.0f : _fLookShare);
+  if (_fLookShare == 0.0f) return;
+
   // (1) what the interpolation hasn't shown yet of the last tick: body plus eye
   float fLerp = *(float *)(*_ppTimer + TIMER_LERPFACTOR);
   fLerp = fLerp < 0.0f ? 0.0f : (fLerp > 1.0f ? 1.0f : fLerp);
@@ -451,8 +470,8 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
 
   float *pfAngles = ppl + 3;   // CPlacement3D: position, then heading, pitch, banking
   float fOldH = pfAngles[0], fOldP = pfAngles[1];
-  pfAngles[0] = NormalizeAngle(pfAngles[0] + ClampAbs(fRestH + fPendingH, 90.0f));
-  pfAngles[1] = ClampAbs(pfAngles[1] + ClampAbs(fRestP + fPendingP, 90.0f), 90.0f);   // the game limits pitch to 90
+  pfAngles[0] = NormalizeAngle(pfAngles[0] + ClampAbs(fRestH + fPendingH, 90.0f) * _fLookShare);
+  pfAngles[1] = ClampAbs(pfAngles[1] + ClampAbs(fRestP + fPendingP, 90.0f) * _fLookShare, 90.0f);   // the game limits pitch to 90
   if (_bLogMouse) {
     LARGE_INTEGER ll, llFreq;
     QueryPerformanceCounter(&ll);

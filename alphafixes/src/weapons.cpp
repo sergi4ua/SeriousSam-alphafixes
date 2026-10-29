@@ -177,7 +177,7 @@ void PutWheelInAction(char *pAction)
   if (ulButtons & 0x1F) return;   // a select key is pressed: it goes first
   bool bUp = sl > 0;
   InterlockedExchangeAdd(&_slWheel, bUp ? -WHEEL_DELTA : WHEEL_DELTA);
-  bool bNext = bUp == g_cfg.bWheelInvert;   // by default the wheel down picks the next weapon
+  bool bNext = bUp != g_cfg.bWheelInvert;   // by default the wheel up picks the next weapon
   ulButtons |= bNext ? KEY_NEXT : KEY_PREVIOUS;
 }
 
