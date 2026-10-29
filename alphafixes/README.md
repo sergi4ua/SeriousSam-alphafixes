@@ -52,9 +52,9 @@ Testers: Biktim, Jarmen
 MinHook by Tsuda Kageyu
 
 Discord: Sergi4UA
-Telegram: t.me/sergi4uaworkshop
+Telegram: https://t.me/sergi4uaworkshop
 YouTube: https://youtube.com/user/Sergi4UA
-Part of the Serious Sam Hyper Server and Serious Sam Community on Telegram: https://t.me/Serious\_Sam\_Hyper\_Server
+Part of the Serious Sam Hyper Server and Serious Sam Community on Telegram: https://t.me/Serious_Sam_Hyper_Server
 
 Enjoy :)
 
