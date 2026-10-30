@@ -10,7 +10,7 @@
 #include <vector>
 
 #define AF_TITLE "AlphaFixes"
-#define AF_VERSION "0.5pt2"
+#define AF_VERSION "0.6-pt1"
 #define AF_AUTHOR "Sergi4UA"
 
 // Testing aids are built only with the CMake option AF_TEST_AIDS (build.bat test).
@@ -76,6 +76,7 @@ struct Config {
 
   // [Gameplay]
   bool  bUnlockCannon = true;          // the cannon can be picked up and selected (see cannon.cpp)
+  bool  bTfeThirdPerson = true;        // third-person camera like The First Encounter's (see thirdperson.cpp)
 };
 
 extern Config g_cfg;
@@ -168,6 +169,9 @@ void ForgetGLContext();                       // the engine deleted its GL conte
 // crosshair.cpp
 void InstallCrosshairEntitiesHooks();
 void UpdateCrosshair();                       // every frame: picks up setting changes
+
+// thirdperson.cpp
+void InstallThirdPersonEntitiesHooks();
 
 // weapons.cpp
 void AddMouseWheel(int iDelta);               // Raw Input thread

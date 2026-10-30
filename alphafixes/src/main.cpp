@@ -47,6 +47,7 @@ void UpdateLateHooks()
   InstallCannonEntitiesPatches();
   InstallWeaponsEntitiesHooks();
   InstallCrosshairEntitiesHooks();
+  InstallThirdPersonEntitiesHooks();
 }
 
 extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)

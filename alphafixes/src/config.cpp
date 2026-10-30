@@ -134,6 +134,7 @@ void LoadConfig()
   g_cfg.bOwnSettingsFile = ReadInt("Fixes", "OwnSettingsFile", def.bOwnSettingsFile) != 0;
 
   g_cfg.bUnlockCannon = ReadInt("Gameplay", "UnlockCannon", def.bUnlockCannon) != 0;
+  g_cfg.bTfeThirdPerson = ReadInt("Gameplay", "TfeThirdPerson", def.bTfeThirdPerson) != 0;
 
   // write the file back so every setting is listed in it
   SaveConfig();
@@ -179,6 +180,7 @@ void SaveConfig()
   WriteInt("Fixes", "OwnSettingsFile", g_cfg.bOwnSettingsFile);
 
   WriteInt("Gameplay", "UnlockCannon", g_cfg.bUnlockCannon);
+  WriteInt("Gameplay", "TfeThirdPerson", g_cfg.bTfeThirdPerson);
 }
 
 // ---------------------------------------------------------------------------

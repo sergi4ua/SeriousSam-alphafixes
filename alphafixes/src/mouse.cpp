@@ -285,12 +285,21 @@ bool InstallMouseFixes()
 // Entities.dll's ComposeActionPacket().  Entries older than 300 ms are dropped: they were
 // not applied (pause, level change).  Split screen, death, third-person and
 // camera views are drawn as the game draws them.
+//
+// The ghostbuster's ray is drawn as particles from the barrel to what it hits,
+// world points the game computes with its own orientation and draws
+// interpolated.  Ahead of them, the corrected view saw the ray's start leave
+// the barrel while turning.  While the ray is drawn for the viewed player, its
+// start is turned with the view around the eye, so it stays on the barrel; its
+// end stays where the ray hits, which is where the damage goes and where the
+// game's crosshair is.
 
 namespace {
 
 // Entities.dll (preferred base)
 constexpr uintptr_t ENT_APPLYACTION = 0x6020C9C0;      // CPlayer::ApplyAction(const CPlayerAction &, FLOAT)
 constexpr uintptr_t ENT_GETVIEWPLACEMENT = 0x6020DC10; // CPlayer::GetViewPlacement(CPlacement3D &), only for drawing
+constexpr uintptr_t ENT_RAY_RENDERPARTICLES = 0x601EE380; // CGhostBusterRay::RenderParticles(void)
 
 // entity layout (alpha build)
 constexpr size_t EN_RENDERTYPE = 0x4;                  // 3: model in the world
@@ -300,9 +309,11 @@ constexpr size_t EN_LASTPLACEMENT_ANGLES = 0x17C;      // en_plLastPlacement (+0
 constexpr size_t PL_VIEW_ANGLES = 0x2D0;               // eye placement relative to the body (+0x2C4)
 constexpr size_t PL_LASTVIEW_ANGLES = 0x2E8;           // the same before the last action (+0x2DC)
 constexpr size_t PL_VIEWMODE = 0x330;                  // 0: first person
-constexpr size_t PL_WEAPONS = 0x320;                   // its CPlayerWeapons: weapon in hand at +0xDC
-constexpr size_t PL_BUTTONS = 0x900;                   // buttons held in the action it applies; fire = 0x80000000
-constexpr int WEAPON_GHOSTBUSTER = 15;
+// CGhostBusterRay: the ray's start, before and after the last tick, drawn interpolated
+constexpr size_t RAY_OWNER = 0x29C;                    // m_penOwner: the player's CPlayerWeapons
+constexpr size_t RAY_SRC_OLD = 0x2A4;                  // m_vSrcOld
+constexpr size_t RAY_SRC = 0x2BC;                      // m_vSrc
+constexpr size_t PW_PLAYER = 0xD0;                     // CPlayerWeapons::m_penPlayer
 // CPlayerAction: pa_aRotation (heading, pitch, banking) in degrees per second
 constexpr size_t PA_ROTATION = 0xC;
 // CControls: axis actions of 0x14 bytes from +0x10: axis, sensitivity, invert, relative, influence
@@ -322,11 +333,15 @@ using CreateAction_t = void(__fastcall *)(char *pControls, void *pvEdx, char *pA
 using ApplyAction_t = void(__fastcall *)(char *pen, void *pvEdx, const char *pAction, float fLatency);
 using GetViewPlacement_t = void(__fastcall *)(char *pen, void *pvEdx, float *ppl);
 using IsPaused_t = BOOL(__fastcall *)(void *pNetwork, void *pvEdx);
+using RenderParticles_t = void(__fastcall *)(char *pen, void *pvEdx);
+using MakeRotationMatrix_t = void(__cdecl *)(float *pm, const float *pa);
 
 CreateAction_t _pfnCreateAction = nullptr;
 ApplyAction_t _pfnApplyAction = nullptr;
 GetViewPlacement_t _pfnGetViewPlacement = nullptr;
 IsPaused_t _pfnIsPaused = nullptr;
+RenderParticles_t _pfnRayRenderParticles = nullptr;
+MakeRotationMatrix_t _pfnMakeRotationMatrix = nullptr;
 void **_ppNetwork = nullptr;
 char **_ppTimer = nullptr;
 float _fTickQuantum = 0.05f;
@@ -336,8 +351,10 @@ std::deque<QueuedTurn> _aqTurns;                       // actions built, not yet
 float _fHeadingPerX = 0.0f, _fHeadingPerY = 0.0f;
 float _fPitchPerX = 0.0f, _fPitchPerY = 0.0f;
 char *_penViewer = nullptr;                            // the player whose view is drawn
-float _fLookShare = 1.0f;                              // how much of the correction is shown (see the ghostbuster)
-DWORD _tmLastView = 0;
+// the view being drawn: corrected or not, its eye, and the rotation from the game's view to it
+bool _bViewCorrected = false;
+float _afViewEye[3] = {};
+float _amViewTurn[9] = {};
 
 float NormalizeAngle(float f)
 {
@@ -436,23 +453,10 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
 {
   _pfnGetViewPlacement(pen, pvEdx, ppl);
   _penViewer = pen;
+  _bViewCorrected = false;
   if (!g_cfg.bLowLatencyLook || _ppTimer == nullptr || *_ppTimer == nullptr) return;
   if (*(int *)(pen + EN_RENDERTYPE) != 3 || !(*(ULONG *)(pen + EN_FLAGS) & 8) || *(int *)(pen + PL_VIEWMODE) != 0) return;
   if (_ctActionsLastTick > 1 || IsPaused()) return;    // split screen: the mouse isn't the only one turning
-
-  // The ghostbuster's ray and its glow are world objects aimed with the game's
-  // view, drawn interpolated like the rest of the world; ahead of them, the
-  // corrected view made them trail behind the weapon while turning.  While it
-  // fires, the correction fades out over 0.15 s, and back in afterwards.
-  char *ppw = *(char **)(pen + PL_WEAPONS);
-  bool bRay = ppw != nullptr && *(int *)(ppw + 0xDC) == WEAPON_GHOSTBUSTER && (*(ULONG *)(pen + PL_BUTTONS) & 0x80000000);
-  DWORD tmNow = GetTickCount();
-  float fElapsed = (tmNow - _tmLastView) / 1000.0f;
-  _tmLastView = tmNow;
-  if (fElapsed > 0.1f) fElapsed = 0.1f;
-  _fLookShare += (bRay ? -fElapsed : fElapsed) / 0.15f;
-  _fLookShare = _fLookShare < 0.0f ? 0.0f : (_fLookShare > 1.0f ? 1.0f : _fLookShare);
-  if (_fLookShare == 0.0f) return;
 
   // (1) what the interpolation hasn't shown yet of the last tick: body plus eye
   float fLerp = *(float *)(*_ppTimer + TIMER_LERPFACTOR);
@@ -470,8 +474,23 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
 
   float *pfAngles = ppl + 3;   // CPlacement3D: position, then heading, pitch, banking
   float fOldH = pfAngles[0], fOldP = pfAngles[1];
-  pfAngles[0] = NormalizeAngle(pfAngles[0] + ClampAbs(fRestH + fPendingH, 90.0f) * _fLookShare);
-  pfAngles[1] = ClampAbs(pfAngles[1] + ClampAbs(fRestP + fPendingP, 90.0f) * _fLookShare, 90.0f);   // the game limits pitch to 90
+  pfAngles[0] = NormalizeAngle(pfAngles[0] + ClampAbs(fRestH + fPendingH, 90.0f));
+  pfAngles[1] = ClampAbs(pfAngles[1] + ClampAbs(fRestP + fPendingP, 90.0f), 90.0f);   // the game limits pitch to 90
+
+  // for the ghostbuster's ray: the turn from the game's view to this one, mDrawn * mGame^T
+  if (_pfnMakeRotationMatrix != nullptr) {
+    const float afGame[3] = { fOldH, fOldP, pfAngles[2] };
+    float mGame[9], mDrawn[9];
+    _pfnMakeRotationMatrix(mGame, afGame);
+    _pfnMakeRotationMatrix(mDrawn, pfAngles);
+    for (int i = 0; i < 3; i++) {
+      for (int k = 0; k < 3; k++) {
+        _amViewTurn[i * 3 + k] = mDrawn[i * 3] * mGame[k * 3] + mDrawn[i * 3 + 1] * mGame[k * 3 + 1] + mDrawn[i * 3 + 2] * mGame[k * 3 + 2];
+      }
+    }
+    memcpy(_afViewEye, ppl, sizeof(_afViewEye));
+    _bViewCorrected = true;
+  }
   if (_bLogMouse) {
     LARGE_INTEGER ll, llFreq;
     QueryPerformanceCounter(&ll);
@@ -481,12 +500,41 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
   }
 }
 
+// A world point seen from the game's view, moved to the same place in the drawn view.
+void TurnWithView(float *pf)
+{
+  const float afRel[3] = { pf[0] - _afViewEye[0], pf[1] - _afViewEye[1], pf[2] - _afViewEye[2] };
+  for (int i = 0; i < 3; i++) {
+    pf[i] = _afViewEye[i] + _amViewTurn[i * 3] * afRel[0] + _amViewTurn[i * 3 + 1] * afRel[1] + _amViewTurn[i * 3 + 2] * afRel[2];
+  }
+}
+
+// void CGhostBusterRay::RenderParticles(void) -- main thread, while the world is drawn
+void __fastcall RayRenderParticles_Hook(char *pen, void *pvEdx)
+{
+  char *ppw = *(char **)(pen + RAY_OWNER);
+  if (!_bViewCorrected || ppw == nullptr || *(char **)(ppw + PW_PLAYER) != _penViewer) {
+    _pfnRayRenderParticles(pen, pvEdx);
+    return;
+  }
+  float *pfSrcOld = (float *)(pen + RAY_SRC_OLD), *pfSrc = (float *)(pen + RAY_SRC);
+  float afSrcOld[3], afSrc[3];
+  memcpy(afSrcOld, pfSrcOld, sizeof(afSrcOld));
+  memcpy(afSrc, pfSrc, sizeof(afSrc));
+  TurnWithView(pfSrcOld);
+  TurnWithView(pfSrc);
+  _pfnRayRenderParticles(pen, pvEdx);
+  memcpy(pfSrcOld, afSrcOld, sizeof(afSrcOld));
+  memcpy(pfSrc, afSrc, sizeof(afSrc));
+}
+
 bool InstallMouseLook()
 {
   _ppTimer = (char **)EngineProc("?_pTimer@@3PAVCTimer@@A");
   _ppNetwork = (void **)EngineProc("?_pNetwork@@3PAVCNetworkLibrary@@A");
   _pfnIsPaused = (IsPaused_t)EngineProc("?IsPaused@CNetworkLibrary@@QAEHXZ");
   if (const float *pf = (const float *)EngineProc("?TickQuantum@CTimer@@2MB")) _fTickQuantum = *pf;
+  _pfnMakeRotationMatrix = (MakeRotationMatrix_t)EngineProc("?MakeRotationMatrixFast@@YAXAAV?$Matrix@M$02$02@@ABV?$Vector@M$02@@@Z");
   void *pCreateAction = GetProcAddress(GetModuleHandleA("Game.dll"), "?CreateAction@CControls@@QAEXAAVCPlayerAction@@@Z");
   return HookFunction(pCreateAction, (void *)CreateAction_Hook, (void **)&_pfnCreateAction, "CControls::CreateAction");
 }
@@ -508,4 +556,12 @@ void InstallMouseEntitiesHooks(HMODULE)
           && HookFunction((void *)ulGetViewPlacement, (void *)GetViewPlacement_Hook, (void **)&_pfnGetViewPlacement,
                           "CPlayer::GetViewPlacement");
   Log("Low-latency mouse look: %s", bOk ? "installed" : "failed");
+  // push ebp; mov ebp, esp; sub esp, 0x3C; push esi; mov esi, ecx; cmp dword ptr [esi + 0x2F8], 2
+  static const BYTE aubRayRender[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x56, 0x8B, 0xF1, 0x83, 0xBE, 0xF8, 0x02, 0x00, 0x00, 0x02 };
+  uintptr_t ulRayRender = RebaseEntities(ENT_RAY_RENDERPARTICLES);
+  bool bRay = bOk && _pfnMakeRotationMatrix != nullptr && CodeMatches(ulRayRender, aubRayRender, sizeof(aubRayRender))
+           && HookFunction((void *)ulRayRender, (void *)RayRenderParticles_Hook, (void **)&_pfnRayRenderParticles,
+                           "CGhostBusterRay::RenderParticles");
+  if (!bRay) _pfnMakeRotationMatrix = nullptr;   // then no view turn is kept for it
+  Log("Ghostbuster ray with low-latency look: %s", bRay ? "installed" : "code differs, not installed");
 }

@@ -85,6 +85,7 @@ const char *const _astrAA[] = { "Off", "2x", "4x", "8x" };
 const char *const _astrFov[] = { "75", "80", "85", "90", "95", "100", "105", "110", "115", "120" };
 const char *const _astrWheel[] = { "Off", "Weapons" };
 const char *const _astrWheelUp[] = { "Next", "Previous" };
+const char *const _astrThirdPerson[] = { "Alpha", "TFE" };
 
 int IndexOfPow2(int i, int iFirst)   // 1/0 -> 0, then 2 -> 1, 4 -> 2 ...
 {
@@ -119,6 +120,7 @@ const Row _aMouseRows[] = {
   { "Mouse wheel", _astrWheel, 2, [] { return g_cfg.bWheelWeapons ? 1 : 0; }, [](int i) { g_cfg.bWheelWeapons = i != 0; } },
   { "Wheel up", _astrWheelUp, 2, [] { return g_cfg.bWheelInvert ? 1 : 0; }, [](int i) { g_cfg.bWheelInvert = i != 0; } },
   { "Weapon bar", _astrOffOn, 2, [] { return g_cfg.bWeaponBar ? 1 : 0; }, [](int i) { g_cfg.bWeaponBar = i != 0; } },
+  { "Third person", _astrThirdPerson, 2, [] { return g_cfg.bTfeThirdPerson ? 1 : 0; }, [](int i) { g_cfg.bTfeThirdPerson = i != 0; } },
 };
 
 struct Page {
@@ -271,7 +273,7 @@ void BuildPages()
   _apvPageVtable[4] = (void *)EXE_MENU_KEYDOWN;
 
   for (int i = 0; i < MAX_ROWS; i++) {
-    float fY = 3.0f - 1.5f * i;
+    float fY = 3.0f - 1.3f * i;   // six rows end above the Croteam logo
     void *pLabelItem = MakeItem(_aubLabelItems[i], EXE_LABEL_ITEM_CTOR, EXE_LABEL_ITEM_SETUP, -1.5f, fY);
     At<DWORD>(pLabelItem, I_LIGHT_FOCUSED) = 0xFFFFFF00;   // as the Video page's labels
     At<int>(pLabelItem, I_LEFT_ALIGNED) = 0;

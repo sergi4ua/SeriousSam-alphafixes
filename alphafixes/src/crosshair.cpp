@@ -9,9 +9,11 @@
 //  - with the HUD size fix on, the size uses min(width, height * 4/3), like the HUD;
 //  - with the fixed crosshair on, the crosshair goes to the middle of the
 //    screen wherever the ray hits.  Its size and colour still come from what
-//    the ray hits.  Only in first person: the third-person camera is behind
-//    and above the player, so what the weapon aims at shows above the middle
-//    of the screen, and only the game's own crosshair shows where.
+//    the ray hits.  Only in first person: the alpha's third-person camera is
+//    behind and above the player, so what the weapon aims at shows above the
+//    middle of the screen, and only the game's own crosshair shows where.
+//  - with the First Encounter's third-person camera (thirdperson.cpp), which
+//    looks at what the weapon aims at, it's in the middle in third person too.
 // And the whole function runs with the player's projection widened like the
 // view it draws over (Hor+, FOV setting).  It was projecting the hit point with
 // the game's 90 degrees, so the crosshair sat too far from the middle: a little
@@ -36,7 +38,8 @@ RenderCrosshair_t _pfnRenderCrosshair = nullptr;
 void __fastcall RenderCrosshair_Hook(void *ppw, void *pvEdx, void *ppr, void *pdp, void *ppl)
 {
   char *penPlayer = *(char **)((char *)ppw + PW_PLAYER);
-  _bFixed = g_cfg.bFixedCrosshair && penPlayer != nullptr && *(int *)(penPlayer + PL_VIEWMODE) == 0;
+  int iViewMode = penPlayer != nullptr ? *(int *)(penPlayer + PL_VIEWMODE) : -1;
+  _bFixed = (g_cfg.bFixedCrosshair && iViewMode == 0) || (g_cfg.bTfeThirdPerson && iViewMode == 3);
   float fOld = WidenPlayerProjection(ppr);
   _pfnRenderCrosshair(ppw, pvEdx, ppr, pdp, ppl);
   RestorePlayerProjection(ppr, fOld);
