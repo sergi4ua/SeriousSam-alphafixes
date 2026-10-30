@@ -1,4 +1,4 @@
-// Pause in the menu.
+// Pause in the menu, and the Pause key.
 //
 // Esc brings up the alpha's menu over the whole screen, but the game goes on
 // behind it: the enemies keep fighting a player who can't see them.  The
@@ -14,17 +14,22 @@
 // the server makes no game ticks) and puts a pause block in the game stream,
 // which every computer in the game applies: the session state's pause flag
 // (+0x48), "Paused by '<player>'" in the console.  The server runs 20 times a
-// second and sends the newest few blocks of the stream each time, so in the
-// menu, which draws hundreds of frames a second, the requests pile up, blocks
-// go unsent, and the console fills with "Missing sequence" and "Resending
-// sequence" lines.
+// second and sends the newest few blocks of the stream each time, so at more
+// than about 80 frames a second the requests can pile up, blocks go unsent,
+// and the console fills with "Missing sequence" and "Resending sequence"
+// lines.  The Pause key does that often on today's PCs, and the menu, which
+// draws hundreds of frames a second, every time.
 //
-// So the mod pauses only games whose players are all on this computer (single
-// player and split screen), and sets those three flags itself, as the
-// round trip would, under the lock the server runs under.  Before each
-// frame's game loop (SeriousSam.exe DoGame, 0x422C00) the menu coming up over
-// such a game pauses it, and the menu going away resumes it.  A game paused
-// with the Pause key before the menu came up stays paused.
+// So in games whose players are all on this computer (single player and split
+// screen) the mod sets those three flags itself, as the round trip would,
+// under the lock the server runs under:
+//  - Before each frame's game loop (SeriousSam.exe DoGame, 0x422C00), the
+//    menu coming up pauses the game, and the menu going away resumes it.  A
+//    game paused with the Pause key before the menu came up stays paused.
+//  - The Pause key flips them, and prints the engine's own message; the
+//    server names a request from this computer "Local machine".  From then
+//    on the pause is the player's, so leaving the menu doesn't change it.
+// Network games keep the alpha's pause and don't pause in the menu.
 #include "alphafixes.h"
 
 namespace {
@@ -46,18 +51,25 @@ constexpr size_t SES_PLAYERS = 0x00;                       // CStaticArray<CPlay
 constexpr size_t PLT_SIZE = 0x38, PLT_ACTIVE = 0x00;       // CPlayerTarget
 constexpr size_t SES_PAUSE = 0x48, SES_WANT_PAUSE = 0x4C;  // CSessionState
 constexpr size_t SRV_PAUSE = 0x20;                         // CServer
+const char *const _strPausedBy = (const char *)0x601037B0;     // "Paused by '%s'\n"
+const char *const _strUnpausedBy = (const char *)0x601037C0;   // "Unpaused by '%s'\n"
+const char *const _strLocalMachine = (const char *)0x60101C4C; // "Local machine"
 
 using DoGame_t = void(__cdecl *)();
+using NetworkMethod_t = void(__fastcall *)(void *pnet, void *pvEdx);
+using PrintF_t = void(__cdecl *)(const char *strFormat, ...);
 using SingleLockCtor_t = void(__fastcall *)(void *psl, void *pvEdx, void *pcs, BOOL bLock);
 using SingleLockDtor_t = void(__fastcall *)(void *psl, void *pvEdx);
 
 DoGame_t _pfnDoGame = nullptr;
+NetworkMethod_t _pfnTogglePause = nullptr;
+PrintF_t _pfnCPrintF = nullptr;
 char **_ppNetwork = nullptr;
 SingleLockCtor_t _pfnSingleLockCtor = nullptr;
 SingleLockDtor_t _pfnSingleLockDtor = nullptr;
 
 bool _bMenuWasUp = false;   // the last frame had the menu up over a game the mod may pause
-bool _bMenuPause = false;   // the mod paused the game for the menu
+bool _bMenuPause = false;   // the menu paused the game, and the Pause key hasn't been pressed since
 
 // This computer runs the game and has every player in it.
 bool AllPlayersLocal(char *pnet, char *pses)
@@ -80,7 +92,7 @@ bool AllPlayersLocal(char *pnet, char *pses)
 }
 
 // What the server's pause block would do, without the console message.
-void SetPause(char *pnet, char *pses, bool bPause)
+void SetPause(char *pnet, char *pses, bool bPause, const char *strWho)
 {
   void *pvLock = nullptr;   // CTSingleLock
   _pfnSingleLockCtor(&pvLock, nullptr, pnet + NET_LOCK, TRUE);
@@ -94,7 +106,7 @@ void SetPause(char *pnet, char *pses, bool bPause)
   auto ppTimer = (void **)EngineProc("?_pTimer@@3PAVCTimer@@A");
   auto pfnCurrentTick = (CurrentTick_t)EngineProc("?CurrentTick@CTimer@@QBE?BMXZ");
   if (ppTimer != nullptr && *ppTimer != nullptr && pfnCurrentTick != nullptr) {
-    Log("Menu pause: %s, timer at %.2f s", bPause ? "paused" : "resumed", pfnCurrentTick(*ppTimer, nullptr));
+    Log("Pause: %s by %s, timer at %.2f s", bPause ? "paused" : "resumed", strWho, pfnCurrentTick(*ppTimer, nullptr));
   }
 #endif
 }
@@ -107,11 +119,11 @@ void UpdateMenuPause()
   bool bMenuUp = g_cfg.bMenuPause && *_pbGameOn && *_pbMenuActive && AllPlayersLocal(pnet, pses);
   if (bMenuUp && !_bMenuWasUp) {
     if (!*(int *)(pses + SES_PAUSE) && !*(int *)(pses + SES_WANT_PAUSE)) {
-      SetPause(pnet, pses, true);
+      SetPause(pnet, pses, true, "the menu");
       _bMenuPause = true;
     }
   } else if (!bMenuUp && _bMenuPause) {
-    SetPause(pnet, pses, false);
+    SetPause(pnet, pses, false, "the menu");
     _bMenuPause = false;
   }
   _bMenuWasUp = bMenuUp;
@@ -121,6 +133,20 @@ void __cdecl DoGame_Hook()
 {
   UpdateMenuPause();
   _pfnDoGame();
+}
+
+// the Pause key (SeriousSam.exe 0x4233E5)
+void __fastcall TogglePause_Hook(char *pnet, void *pvEdx)
+{
+  char *pses = *(char **)(pnet + NET_SESSION_STATE);
+  if (pses == nullptr || !*_pbGameOn || !AllPlayersLocal(pnet, pses)) {
+    _pfnTogglePause(pnet, pvEdx);
+    return;
+  }
+  bool bPause = !*(int *)(pses + SES_PAUSE);
+  SetPause(pnet, pses, bPause, "the Pause key");
+  _bMenuPause = false;
+  _pfnCPrintF(bPause ? _strPausedBy : _strUnpausedBy, _strLocalMachine);
 }
 
 }  // namespace
@@ -136,4 +162,16 @@ void InstallMenuPause()
           && CodeMatches(EXE_DOGAME, aubDoGame, sizeof(aubDoGame))
           && HookFunction((void *)EXE_DOGAME, (void *)DoGame_Hook, (void **)&_pfnDoGame, "DoGame");
   Log("Pause in the menu: %s", bOk ? "installed" : "code differs, not installed");
+
+  static const char strPausedBy[] = "Paused by '%s'\n";
+  static const char strUnpausedBy[] = "Unpaused by '%s'\n";
+  static const char strLocalMachine[] = "Local machine";
+  _pfnCPrintF = (PrintF_t)EngineProc("?CPrintF@@YAXPBDZZ");
+  bOk = bOk && _pfnCPrintF != nullptr
+     && CodeMatches((uintptr_t)_strPausedBy, strPausedBy, sizeof(strPausedBy))
+     && CodeMatches((uintptr_t)_strUnpausedBy, strUnpausedBy, sizeof(strUnpausedBy))
+     && CodeMatches((uintptr_t)_strLocalMachine, strLocalMachine, sizeof(strLocalMachine))
+     && HookFunction(EngineProc("?TogglePause@CNetworkLibrary@@QAEXXZ"), (void *)TogglePause_Hook,
+                     (void **)&_pfnTogglePause, "CNetworkLibrary::TogglePause");
+  Log("Pause key without network requests: %s", bOk ? "installed" : "code differs, not installed");
 }
