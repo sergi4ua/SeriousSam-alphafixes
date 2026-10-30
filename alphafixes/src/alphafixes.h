@@ -77,6 +77,7 @@ struct Config {
   // [Gameplay]
   bool  bUnlockCannon = true;          // the cannon can be picked up and selected (see cannon.cpp)
   bool  bTfeThirdPerson = true;        // third-person camera like The First Encounter's (see thirdperson.cpp)
+  bool  bMenuPause = true;             // the menu pauses a game with every player on this computer (see pause.cpp)
 };
 
 extern Config g_cfg;
@@ -190,6 +191,9 @@ void InstallTextFixes();
 
 // cannon.cpp
 void InstallCannonEntitiesPatches();
+
+// pause.cpp
+void InstallMenuPause();
 
 // testaids.cpp
 #if AF_TEST_AIDS

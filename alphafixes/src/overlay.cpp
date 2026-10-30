@@ -295,6 +295,9 @@ void MouseSection()
 void OtherSection()
 {
   ImGui::Checkbox("Show frame rate", &g_cfg.bShowFps);
+  ImGui::Checkbox("Pause the game in the menu", &g_cfg.bMenuPause);
+  HelpMarker("Esc pauses single-player and split-screen games while the menu is up.  "
+             "Network games go on, as in the alpha.");
   ImGui::Checkbox("AlphaFixes page in the game's Options menu", &g_cfg.bInGameMenu);
   HelpMarker("Takes effect the next time the game starts.");
   ImGui::Text("Settings window key: %s (ToggleKey in AlphaFixes.ini)", KeyName(g_cfg.iToggleKey));

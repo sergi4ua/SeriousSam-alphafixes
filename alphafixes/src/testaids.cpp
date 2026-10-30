@@ -28,6 +28,9 @@
 //
 // Console log: started with AF_LOG_CONSOLE=1, every line printed to the
 // game's console is also written to the log.
+//
+// Game time: Bin\AlphaFixes.time writes the game's time and whether the game
+// is paused to the log, after the file's text (a label for the log).
 #include "alphafixes.h"
 
 #if AF_TEST_AIDS
@@ -236,6 +239,20 @@ void __fastcall PutString_Hook(void *pcon, void *pvEdx, const char *str)
   _pfnPutString(pcon, pvEdx, str);
 }
 
+void LogGameTime(const std::string &strLabel)
+{
+  using CurrentTick_t = float(__fastcall *)(void *ptm, void *pvEdx);
+  using IsPaused_t = BOOL(__fastcall *)(void *pnet, void *pvEdx);
+  auto ppTimer = (void **)EngineProc("?_pTimer@@3PAVCTimer@@A");
+  auto pfnCurrentTick = (CurrentTick_t)EngineProc("?CurrentTick@CTimer@@QBE?BMXZ");
+  auto ppNetwork = (void **)EngineProc("?_pNetwork@@3PAVCNetworkLibrary@@A");
+  auto pfnIsPaused = (IsPaused_t)EngineProc("?IsPaused@CNetworkLibrary@@QAEHXZ");
+  if (ppTimer == nullptr || *ppTimer == nullptr || pfnCurrentTick == nullptr || ppNetwork == nullptr
+      || *ppNetwork == nullptr || pfnIsPaused == nullptr) return;
+  Log("Test: %s: game time %.2f s, %s", strLabel.c_str(), pfnCurrentTick(*ppTimer, nullptr),
+      pfnIsPaused(*ppNetwork, nullptr) ? "paused" : "running");
+}
+
 void SwitchVideoMode(const std::string &strMode)
 {
   VideoMode vm = GetCurrentVideoMode();
@@ -268,6 +285,7 @@ void RunTestAids()
   if (ReadRequest("AlphaFixes.menudump", strRequest)) LogMenuItems();
   if (ReadRequest("AlphaFixes.console", strRequest)) RunConsoleCommand(strRequest);
   if (ReadRequest("AlphaFixes.videomode", strRequest)) SwitchVideoMode(strRequest);
+  if (ReadRequest("AlphaFixes.time", strRequest)) LogGameTime(strRequest);
   if (ReadRequest("AlphaFixes.unsetlight", strRequest)) {
     PoisonUnsetPlayerLight();
     Log("Bad light: armed for the player's light after the next level change");

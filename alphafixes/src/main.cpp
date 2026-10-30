@@ -74,6 +74,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   InstallGameSettingsFile();
   InstallGraphicsOptions();
   InstallSoundFixes();
+  InstallMenuPause();
   Log("In-game menu: %s", InstallInGameMenu() ? "ok" : "failed");
 #if AF_TEST_AIDS
   InstallTestAids();
