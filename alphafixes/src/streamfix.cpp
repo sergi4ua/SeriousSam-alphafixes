@@ -8,7 +8,7 @@
 // exception can't travel back through a window procedure that Windows called
 // (a kernel callback), so a stream touched inside a window message never
 // reaches the filter and the game crashes.  The same problem crashes the alpha
-// World Editor on startup (see AlphaEditor\README.md).
+// World Editor on startup (see editor.cpp).
 //
 // A vectored exception handler sees every exception first, whatever the stack
 // looks like.  It hands access violations to the engine's own filter, which

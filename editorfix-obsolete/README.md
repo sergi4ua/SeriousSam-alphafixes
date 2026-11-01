@@ -1,4 +1,4 @@
-Please read this readme carefully.
+Note: Editor Fixes are now handled by Alpha Fixes.
 
 
 

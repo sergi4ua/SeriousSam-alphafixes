@@ -1,5 +1,5 @@
 @echo off
-rem Builds winmm.dll and AlphaFixes.dll (32-bit).
+rem Builds winmm.dll, AlphaFixes.dll and obj2lwo.exe (32-bit).
 rem   build.bat                release build into build\Release
 rem   build.bat install        release build, then copy both DLLs into ..\Bin
 rem   build.bat test           test build (with the testing aids) into build-test\Release
@@ -29,7 +29,7 @@ if not exist "%CMAKE%" goto :nocmake
 "%CMAKE%" --build %DIR% --config Release || exit /b 1
 if defined INSTALL "%CMAKE%" --install %DIR% --config Release || exit /b 1
 echo.
-if "%AIDS%"=="ON" (echo Built %DIR%\Release\winmm.dll and %DIR%\Release\AlphaFixes.dll ^(test build, with testing aids^)) else (echo Built %DIR%\Release\winmm.dll and %DIR%\Release\AlphaFixes.dll ^(release^))
+if "%AIDS%"=="ON" (echo Built %DIR%\Release\winmm.dll, AlphaFixes.dll and obj2lwo.exe ^(test build, with testing aids^)) else (echo Built %DIR%\Release\winmm.dll, AlphaFixes.dll and obj2lwo.exe ^(release^))
 exit /b 0
 
 :nocmake

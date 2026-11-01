@@ -38,7 +38,8 @@ target_include_directories(minhook PUBLIC ${MINHOOK_DIR}/include)
 # --- AlphaFixes.dll ------------------------------------------------------------
 add_library(AlphaFixes SHARED
   src/main.cpp src/config.cpp src/patch.cpp src/display.cpp src/widescreen.cpp
-  src/mouse.cpp src/overlay.cpp src/streamfix.cpp src/lightfix.cpp src/cannon.cpp src/weapons.cpp src/crosshair.cpp src/thirdperson.cpp src/texts.cpp src/settingsfile.cpp src/graphics.cpp src/sound.cpp src/ingamemenu.cpp src/pause.cpp src/testaids.cpp src/alphafixes.h)
+  src/mouse.cpp src/overlay.cpp src/streamfix.cpp src/lightfix.cpp src/cannon.cpp src/weapons.cpp src/crosshair.cpp src/thirdperson.cpp src/texts.cpp src/settingsfile.cpp src/graphics.cpp src/sound.cpp src/ingamemenu.cpp src/pause.cpp src/testaids.cpp src/alphafixes.h
+  src/editor.cpp src/objimport.c src/objimport.h)
 target_link_libraries(AlphaFixes PRIVATE imgui minhook opengl32 user32 gdi32)
 target_compile_options(AlphaFixes PRIVATE /W4 /wd4100)
 target_link_options(AlphaFixes PRIVATE /SAFESEH:NO)
@@ -46,5 +47,9 @@ target_link_options(AlphaFixes PRIVATE /SAFESEH:NO)
 # Testing aids (trigger files in Bin, AF_LOG_* environment variables): for test builds only.
 option(AF_TEST_AIDS "Build the testing aids into AlphaFixes.dll" OFF)
 target_compile_definitions(AlphaFixes PRIVATE AF_TEST_AIDS=$<BOOL:${AF_TEST_AIDS}>)
+
+# --- obj2lwo.exe: the World Editor's OBJ import as a command-line converter -------
+add_executable(obj2lwo src/obj2lwo.c src/objimport.c src/objimport.h)
+target_compile_options(obj2lwo PRIVATE /W4)
 
 install(TARGETS winmm_proxy AlphaFixes RUNTIME DESTINATION "${AF_GAME_BIN}" LIBRARY DESTINATION "${AF_GAME_BIN}")

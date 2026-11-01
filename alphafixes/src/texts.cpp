@@ -30,13 +30,16 @@ void InstallTextFixes()
   bool bBanner = CodeMatches(EXE_EVALUATION_TEXT, aubPushOld, sizeof(aubPushOld))
               && WriteCode((void *)EXE_EVALUATION_TEXT, aubPushNew, sizeof(aubPushNew));
   Log("Menu banner: %s", bBanner ? _strBanner : "code differs, not changed");
+  InstallHideNotPrecached();
+}
 
-  if (g_cfg.bHideNotPrecached) {
-    // test ah, 0x40; je +0x19 -> jmp +0x19
-    static const BYTE aubOld[] = { 0xF6, 0xC4, 0x40, 0x74, 0x19 };
-    static const BYTE aubNew[] = { 0xF6, 0xC4, 0x40, 0xEB, 0x19 };
-    bool bOk = CodeMatches(ENG_NOT_PRECACHED_TEST - 3, aubOld, sizeof(aubOld))
-            && WriteCode((void *)(ENG_NOT_PRECACHED_TEST - 3), aubNew, sizeof(aubNew));
-    Log("\"Not precached\" messages: %s", bOk ? "hidden" : "code differs, not changed");
-  }
+void InstallHideNotPrecached()
+{
+  if (!g_cfg.bHideNotPrecached) return;
+  // test ah, 0x40; je +0x19 -> jmp +0x19
+  static const BYTE aubOld[] = { 0xF6, 0xC4, 0x40, 0x74, 0x19 };
+  static const BYTE aubNew[] = { 0xF6, 0xC4, 0x40, 0xEB, 0x19 };
+  bool bOk = CodeMatches(ENG_NOT_PRECACHED_TEST - 3, aubOld, sizeof(aubOld))
+          && WriteCode((void *)(ENG_NOT_PRECACHED_TEST - 3), aubNew, sizeof(aubNew));
+  Log("\"Not precached\" messages: %s", bOk ? "hidden" : "code differs, not changed");
 }

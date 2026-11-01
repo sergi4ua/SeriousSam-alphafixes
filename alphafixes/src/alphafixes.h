@@ -82,7 +82,7 @@ struct Config {
 
 extern Config g_cfg;
 
-void LoadConfig();
+void LoadConfig(bool bWriteBack = true);    // false: only read (the World Editor)
 void SaveConfig();
 const char *KeyName(int vk);
 
@@ -90,7 +90,7 @@ const char *KeyName(int vk);
 // Logging (AlphaFixes.log next to SeriousSam.exe)
 // ---------------------------------------------------------------------------
 
-void LogOpen();
+void LogOpen(const char *strFile);          // in the game folder
 void Log(const char *strFormat, ...);
 
 // ---------------------------------------------------------------------------
@@ -188,12 +188,16 @@ void InstallGameSettingsFile();
 
 // texts.cpp
 void InstallTextFixes();
+void InstallHideNotPrecached();               // Engine.dll part, also in the World Editor
 
 // cannon.cpp
 void InstallCannonEntitiesPatches();
 
 // pause.cpp
 void InstallMenuPause();
+
+// editor.cpp (WorldEditor.exe)
+void InstallEditorFixes();
 
 // testaids.cpp
 #if AF_TEST_AIDS

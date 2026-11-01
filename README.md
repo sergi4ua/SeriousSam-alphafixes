@@ -4,21 +4,15 @@ A set of fixes for the alpha build of Serious Sam: First Encounter (also known a
 
 
 
-#### editorfix
-
-This folder contains fixes for the World Editor, so it can be run on modern systems along with some improvements.
-
-
-
-\---------------------------------------------
-
-
-
 #### alphafixes
 
-This folder contains fixes for the game itself.
+This folder contains fixes for the game itself and the editor.
 
 
+
+#### editorfix-obsolete
+
+This folder contains fixes for the World Editor, however it was made obsolete because it was merged with alphafixes.
 
 
 

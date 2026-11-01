@@ -1,11 +1,12 @@
-// AlphaFixes.dll entry: loaded by the winmm.dll proxy at SeriousSam.exe's
-// entry point, before WinMain.  Engine.dll, Game.dll and the exe are loaded but
-// nothing of the game has run yet.
+// AlphaFixes.dll entry: loaded by the winmm.dll proxy at the entry point of
+// SeriousSam.exe or WorldEditor.exe, before WinMain.  Engine.dll and the exe's
+// other DLLs are loaded but nothing of the program has run yet.
 #include "alphafixes.h"
 
 namespace {
 
 constexpr DWORD EXE_TIMESTAMP = 0x387DDACA;      // SeriousSam.exe, 13 Jan 2000
+constexpr DWORD EDITOR_TIMESTAMP = 0x387DDB2A;   // WorldEditor.exe, same build
 constexpr DWORD ENGINE_TIMESTAMP = 0x387DDB80;   // Engine.dll, same build
 
 DWORD ModuleTimestamp(HMODULE hModule)
@@ -56,10 +57,27 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   if (_bInitDone) return TRUE;
   _bInitDone = true;
 
-  LogOpen();
-  Log(AF_TITLE " " AF_VERSION " (" __DATE__ ")%s", AF_TEST_AIDS ? ", test build with testing aids" : "");
   DWORD dwExe = ModuleTimestamp(GetModuleHandleA(nullptr));
   DWORD dwEngine = ModuleTimestamp(GetModuleHandleA("Engine.dll"));
+  if (dwExe == EDITOR_TIMESTAMP) {
+    // the World Editor gets the fixes for the engine and its own (editor.cpp), and
+    // its own log, so it can run next to the game
+    LogOpen("AlphaFixes_Editor.log");
+    Log(AF_TITLE " " AF_VERSION " (" __DATE__ ") in the World Editor");
+    if (dwEngine != ENGINE_TIMESTAMP) {
+      Log("Unknown engine build (%08lX); nothing changed", dwEngine);
+      return FALSE;
+    }
+    LoadConfig(false);
+    InstallStreamFix();
+    InstallLightFix();
+    InstallHideNotPrecached();
+    InstallEditorFixes();
+    return TRUE;
+  }
+
+  LogOpen("AlphaFixes.log");
+  Log(AF_TITLE " " AF_VERSION " (" __DATE__ ")%s", AF_TEST_AIDS ? ", test build with testing aids" : "");
   if (dwExe != EXE_TIMESTAMP || dwEngine != ENGINE_TIMESTAMP) {
     Log("Unknown game build (exe %08lX, engine %08lX); nothing changed", dwExe, dwEngine);
     return FALSE;

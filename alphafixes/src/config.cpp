@@ -79,14 +79,14 @@ static int ParseKey(const char *str, int iDefault)
   return iDefault;
 }
 
-void LoadConfig()
+void LoadConfig(bool bWriteBack)
 {
   Config def;
   char str[64];
 
   // the mod was called SamOriginFixes before 0.5: keep the settings of an earlier install
   std::string strOldIni = GameDir() + "SamOriginFixes.ini";
-  if (GetFileAttributesA(IniPath().c_str()) == INVALID_FILE_ATTRIBUTES
+  if (bWriteBack && GetFileAttributesA(IniPath().c_str()) == INVALID_FILE_ATTRIBUTES
    && GetFileAttributesA(strOldIni.c_str()) != INVALID_FILE_ATTRIBUTES) {
     Log("Settings: %s", MoveFileA(strOldIni.c_str(), IniPath().c_str()) ? "SamOriginFixes.ini renamed to AlphaFixes.ini"
                                                                          : "could not rename SamOriginFixes.ini");
@@ -138,7 +138,7 @@ void LoadConfig()
   g_cfg.bMenuPause = ReadInt("Gameplay", "MenuPause", def.bMenuPause) != 0;
 
   // write the file back so every setting is listed in it
-  SaveConfig();
+  if (bWriteBack) SaveConfig();
 }
 
 void SaveConfig()
@@ -190,10 +190,10 @@ void SaveConfig()
 static FILE *_pfLog = nullptr;
 static CRITICAL_SECTION _csLog;
 
-void LogOpen()
+void LogOpen(const char *strFile)
 {
   InitializeCriticalSection(&_csLog);
-  _pfLog = fopen((GameDir() + "AlphaFixes.log").c_str(), "w");
+  _pfLog = fopen((GameDir() + strFile).c_str(), "w");
 }
 
 void Log(const char *strFormat, ...)
