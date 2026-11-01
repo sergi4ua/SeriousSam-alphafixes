@@ -4,15 +4,21 @@ A set of fixes for the alpha build of Serious Sam: First Encounter (also known a
 
 
 
-#### alphafixes
+###### alphafixes
 
 This folder contains fixes for the game itself and the editor.
 
 
 
-#### editorfix-obsolete
+###### editorfix-obsolete
 
-This folder contains fixes for the World Editor, however it was made obsolete because it was merged with alphafixes.
+This folder contains fixes for the World Editor, however it was made obsolete because it was merged with alphafixes. The editor is no longer needs to be patched.
+
+
+
+###### wldconvert
+
+Utility to convert First Encounter levels to Alpha. May contain bugs.
 
 
 
