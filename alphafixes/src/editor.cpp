@@ -795,4 +795,6 @@ void InstallEditorFixes()
   Log("Toolbar layout: %s", _bBarStateFixInstalled ? "installed" : "code differs, not installed");
   InstallObjImport();
   Log("OBJ import: %s", _bObjImportInstalled ? "installed" : "code differs, not installed");
+  if (g_cfg.bPropertyGrid) Log("Property grid: %s", InstallPropertyGrid() ? "installed" : "code differs, not installed");
+  else Log("Property grid: off");
 }
