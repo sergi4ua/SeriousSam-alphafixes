@@ -83,6 +83,7 @@ private:
   std::string m_strGameDir;
   void *m_hEngine = nullptr;
   void *m_hEntities = nullptr;
+  std::map<std::string, void *> m_mapPackages;                  // lower-case DLL path -> other class DLLs
   std::map<std::string, AlphaClass> m_mapClasses;               // lower-case .ecl path -> class
   std::map<std::string, bool> m_mapMissing;
 };

@@ -22,6 +22,12 @@ Utility to convert First Encounter levels to Alpha. May contain bugs.
 
 
 
+###### alphafixesentities
+
+Adds new entities like RobotDriving to the Alpha build.
+
+
+
 **Disclaimer:**
 
 This project is NOT related to Serious Sam: Origins or it's authors.

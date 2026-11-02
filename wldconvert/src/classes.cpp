@@ -204,16 +204,35 @@ const AlphaClass *AlphaClasses::ForFile(const std::string &strEcl)
   // Classes\Name.ecl: "Package: TFNM Bin\Entities.dll" and "Class: CName"
   std::string strText;
   std::string strCpp;
+  std::string strPackage;
   if (ReadTextFile(m_strGameDir + "\\" + strEcl, strText)) {
     size_t i = strText.find("Class:");
     if (i != std::string::npos) {
       std::istringstream ss(strText.substr(i + 6));
       ss >> strCpp;
     }
+    i = strText.find("Package:");
+    if (i != std::string::npos) {
+      std::istringstream ss(strText.substr(i + 8));
+      std::string strTag;
+      ss >> strTag >> strPackage;   // "TFNM Bin\Name.dll"
+    }
+  }
+  // Classes from another DLL than Entities.dll (such as AlphaFixesEntities.dll)
+  // are looked up in that DLL; it imports Entities.dll for its base classes.
+  void *hPackage = m_hEntities;
+  std::string strPackageKey = ToLower(strPackage);
+  if (!strPackageKey.empty() && strPackageKey != "bin\\entities.dll") {
+    auto itPackage = m_mapPackages.find(strPackageKey);
+    if (itPackage == m_mapPackages.end()) {
+      void *h = LoadLibraryExA((m_strGameDir + "\\" + strPackage).c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+      itPackage = m_mapPackages.emplace(strPackageKey, h).first;
+    }
+    hPackage = itPackage->second;
   }
   DLLEntityClass *pdec = nullptr;
-  if (!strCpp.empty()) {
-    pdec = (DLLEntityClass *)GetProcAddress((HMODULE)m_hEntities, (strCpp + "_DLLClass").c_str());
+  if (!strCpp.empty() && hPackage != nullptr) {
+    pdec = (DLLEntityClass *)GetProcAddress((HMODULE)hPackage, (strCpp + "_DLLClass").c_str());
   }
   if (pdec == nullptr) {
     m_mapMissing[strKey] = true;
