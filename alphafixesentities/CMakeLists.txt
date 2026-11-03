@@ -36,7 +36,7 @@ endforeach()
 add_custom_target(AlphaImportLibs DEPENDS ${AFE_IMPORT_LIBS})
 
 # Entity classes: one .es each in Classes\, compiled by the alpha's Ecc.exe.
-set(AFE_CLASSES RobotDriving)
+set(AFE_CLASSES RobotDriving Copier Damager Trigger2)
 set(AFE_GENDIR "${CMAKE_CURRENT_BINARY_DIR}/gen")
 foreach(cls ${AFE_CLASSES})
   set(es "${CMAKE_CURRENT_SOURCE_DIR}/Classes/${cls}.es")
@@ -52,7 +52,7 @@ foreach(cls ${AFE_CLASSES})
 endforeach()
 
 add_library(AlphaFixesEntities SHARED
-  src/DllMain.cpp src/EnemyBase.cpp src/AlphaFixesEntities.h
+  src/DllMain.cpp src/EnemyBase.cpp src/Common.cpp src/AlphaFixesEntities.h
   SDK/StdH.h SDK/Engine/Engine.h SDK/Entities/Common.h SDK/Entities/EnemyBase.h SDK/Entities/Projectile.h
   ${AFE_SOURCES_ES} ${AFE_GENERATED})
 add_dependencies(AlphaFixesEntities AlphaImportLibs)

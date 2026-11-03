@@ -28,6 +28,14 @@ typedef float ANGLE;
 typedef float RANGE;
 typedef float TIME;
 typedef unsigned long COLOR;
+// colours are 0xRRGGBBAA
+#define CT_OPAQUE 0x000000FFUL
+#define C_BLACK   0x00000000UL
+#define C_WHITE   0xFFFFFF00UL
+#define C_RED     0xFF000000UL
+#define C_GREEN   0x00FF0000UL
+#define C_BLUE    0x0000FF00UL
+#define C_BROWN   0x7F3F0000UL
 
 #ifndef ASSERT
 #define ASSERT(expr) ((void)0)
@@ -41,6 +49,8 @@ inline FLOAT Sqrt(FLOAT f) { return (FLOAT)sqrt(f < 0.0f ? 0.0f : f); }
 template <class Type> inline Type Abs(Type x) { return x < 0 ? -x : x; }
 template <class Type> inline Type Min(Type a, Type b) { return a < b ? a : b; }
 template <class Type> inline Type Max(Type a, Type b) { return a > b ? a : b; }
+template <class Type> inline Type ClampDn(Type x, Type tDown) { return x < tDown ? tDown : x; }
+template <class Type> inline Type ClampUp(Type x, Type tUp) { return x > tUp ? tUp : x; }
 
 // --- math ------------------------------------------------------------------
 
@@ -67,9 +77,40 @@ public:
   // dot product
   Type operator%(const Vector &v) const { Type t = 0; for (int i = 0; i < iDimensions; i++) t += vector[i] * v.vector[i]; return t; }
   Type Length(void) const { return (Type)sqrt(*this % *this); }
+  // largest absolute component
+  Type MaxNorm(void) const { Type t = 0; for (int i = 0; i < iDimensions; i++) t = Max(t, Abs(vector[i])); return t; }
 };
 typedef Vector<FLOAT, 3> FLOAT3D;
 typedef Vector<ANGLE, 3> ANGLE3D;
+
+// Matrix and box templates, with the engine's names so that its exports link.
+// Rows and columns are numbered from 1, as in the engine.
+template<class Type, int iRows, int iColumns>
+class Matrix {
+public:
+  Type matrix[iRows][iColumns];
+  Type &operator()(int iRow, int iColumn) { return matrix[iRow - 1][iColumn - 1]; }
+  const Type &operator()(int iRow, int iColumn) const { return matrix[iRow - 1][iColumn - 1]; }
+  Vector<Type, iRows> GetColumn(int iColumn) const {
+    Vector<Type, iRows> v;
+    for (int i = 0; i < iRows; i++) v.vector[i] = matrix[i][iColumn - 1];
+    return v;
+  }
+};
+typedef Matrix<FLOAT, 3, 3> FLOATmatrix3D;
+
+template<class Type, int iDimensions>
+class AABBox {
+public:
+  Vector<Type, iDimensions> minvect, maxvect;
+  AABBox(void) {}
+  // a box of the given radius around a point
+  AABBox(const Vector<Type, iDimensions> &vCenter, Type tRadius) {
+    for (int i = 0; i < iDimensions; i++) { minvect.vector[i] = vCenter.vector[i] - tRadius; maxvect.vector[i] = vCenter.vector[i] + tRadius; }
+  }
+  Vector<Type, iDimensions> Size(void) const { return maxvect - minvect; }
+};
+typedef AABBox<FLOAT, 3> FLOATaabbox3D;
 
 class CPlacement3D {
 public:
@@ -86,6 +127,8 @@ public:
 ENGINE_API void *AllocMemory(SLONG slSize);
 ENGINE_API void FreeMemory(void *pvMemory);
 ENGINE_API char *StringDuplicate(const char *strOriginal);
+// prints to the console
+ENGINE_API void CPrintF(const char *strFormat, ...);
 
 class CTString {
 public:
@@ -96,6 +139,7 @@ public:
   ENGINE_API ~CTString();
   ENGINE_API CTString &operator=(const char *strCharString);
   ENGINE_API CTString &operator=(const CTString &strOther);
+  ENGINE_API INDEX PrintF(const char *strFormat, ...);
   operator const char *() const { return str_String; }
 };
 
@@ -287,7 +331,11 @@ static_assert(sizeof(CEntityComponent) == 20, "CEntityComponent is 20 bytes in t
 #define ENF_DELETED         (1UL << 2)
 #define ENF_ALIVE           (1UL << 3)
 
-// physics and collision flags, as the alpha's own enemies use them
+// physics and collision flags, as the alpha's own classes use them (enemies,
+// and Teleport and Marker for editor models)
+#define EPF_MODEL_IMMATERIAL 0x00000000UL
+#define ECF_IMMATERIAL       0x00000000UL
+#define ECF_TOUCHMODEL       0x00200810UL
 #define EPF_MODEL_WALKING   0x40000207UL
 #define EPF_MODEL_CORPSE    0x20000207UL
 #define ECF_MODEL           0x00017C02UL
@@ -310,6 +358,11 @@ enum DamageType {
   DMT_DISCONNECTED = 14,
   DMT_NONE = 9999,
 };
+// whether an entity is of a class, by the class's name
+ENGINE_API BOOL IsOfClass(CEntity *pen, const char *pstrClassName);
+
+// the engine's table of them, with the alpha's names, for enum properties
+ENGINE_API extern CEntityPropertyEnumType DamageType_enum;
 
 class CEntity {
 public:
@@ -321,7 +374,9 @@ public:
   CPlacement3D en_plPlacement;            // 0x1C
   UBYTE en_aubPad34[0x5C - 0x34];
   CModelObject *en_pmoModelObject;        // 0x5C
-  UBYTE en_aubPad60[0xB0 - 0x60];
+  UBYTE en_aubPad60[0x70 - 0x60];
+  CWorld *en_pwoWorld;                    // 0x70
+  UBYTE en_aubPad74[0xB0 - 0x74];
   FLOAT en_fHealth;                       // 0xB0 (CLiveEntity)
   UBYTE en_aubPadB4[0x120 - 0xB4];
   FLOAT en_fDensity;                      // 0x120
@@ -389,6 +444,17 @@ public:
   ENGINE_API void RemReference(void);
   ENGINE_API void Initialize(const CEntityEvent &eeInput);
   ENGINE_API void InitAsModel(void);
+  ENGINE_API void InitAsEditorModel(void);
+  ENGINE_API void Destroy(void);
+  ENGINE_API void SendEvent(const CEntityEvent &ee);
+  ENGINE_API static INDEX GetMaxPlayers(void);
+  ENGINE_API static CEntityPointer GetPlayerEntity(INDEX iPlayer);
+  CWorld *GetWorld(void) const { return en_pwoWorld; }
+  ENGINE_API void Teleport(const CPlacement3D &plNew, BOOL bTelefrag = TRUE);
+  ENGINE_API const FLOATmatrix3D &GetRotationMatrix(void) const;
+  ENGINE_API void GetBoundingBox(FLOATaabbox3D &box);
+  ENGINE_API void InflictDirectDamage(CEntity *penToDamage, CEntity *penInflictor, enum DamageType dmtType,
+    FLOAT fDamageAmmount, const FLOAT3D &vHitPoint, const FLOAT3D &vDirection);
   ENGINE_API void SetPhysicsFlags(ULONG ulFlags);
   ENGINE_API void SetCollisionFlags(ULONG ulFlags);
   ENGINE_API void SetFlags(ULONG ulFlags);
@@ -419,6 +485,12 @@ static_assert(offsetof(CEntity, en_ulFlags) == 0x10, "");
 static_assert(offsetof(CEntity, en_ctReferences) == 0x18, "");
 static_assert(offsetof(CEntity, en_plPlacement) == 0x1C, "");
 static_assert(offsetof(CEntity, en_pmoModelObject) == 0x5C, "");
+static_assert(offsetof(CEntity, en_pwoWorld) == 0x70, "");
+
+class CWorld {
+public:
+  ENGINE_API CEntity *CopyEntityInWorld(CEntity &enOriginal, const CPlacement3D &plOtherEntity);
+};
 static_assert(offsetof(CEntity, en_fHealth) == 0xB0, "");
 static_assert(offsetof(CEntity, en_fDensity) == 0x120, "");
 static_assert(offsetof(CEntity, en_vGravityDir) == 0x134, "");
@@ -434,10 +506,23 @@ public:
     FLOAT fDamageAmmount, const FLOAT3D &vHitPoint, const FLOAT3D &vDirection);
 };
 
+// The alpha's CEntity vtable ends at slot 39: PreMoving, DoMoving, PostMoving,
+// ChecksumForSync and DumpSync_t (40-44) start in CRationalEntity, which
+// overrides these slots of the vtable too.
 class CRationalEntity : public CLiveEntity {
 public:
+  ENGINE_API CRationalEntity(void);
+  ENGINE_API virtual ~CRationalEntity();
+  ENGINE_API virtual void Copy(CEntity &enOther, ULONG ulFlags);
+  ENGINE_API virtual void Read_t(CTStream *istr);
+  ENGINE_API virtual void Write_t(CTStream *ostr);
+  ENGINE_API virtual void OnInitialize(const CEntityEvent &eeInput);
+  ENGINE_API virtual void OnEnd(void);
   ENGINE_API virtual const char *PrintStackDebug(void);
   ENGINE_API virtual BOOL HandleEvent(const CEntityEvent &ee);
+  ENGINE_API virtual void PreMoving(void);
+  ENGINE_API virtual void DoMoving(void);
+  ENGINE_API virtual void PostMoving(void);
   ENGINE_API virtual void ChecksumForSync(ULONG &ulCRC);
   ENGINE_API virtual void DumpSync_t(CTStream &strm);
 
@@ -522,6 +607,14 @@ public:
   void (*dec_OnWorldEnd)(CWorld *pwoWorld);
 };
 static_assert(sizeof(CDLLEntityClass) == 18 * 4, "CDLLEntityClass is 18 fields in the alpha");
+
+// the engine's own class tables, as bases of entity classes
+extern "C" ENGINE_API CDLLEntityClass CEntity_DLLClass;
+extern "C" ENGINE_API CDLLEntityClass CLiveEntity_DLLClass;
+extern "C" ENGINE_API CDLLEntityClass CRationalEntity_DLLClass;
+
+// timer that never fires (CRationalEntity::SetTimerAt)
+#define THINKTIME_NEVER (-1.0f)
 
 #define ENTITY_CLASSDEFINITION(classname, basename, descriptivename, iconfilename, id) \
   CDLLEntityClass classname##_DLLClass = {                                              \

@@ -31,6 +31,10 @@ void *_pfnStopMoving = nullptr;
 void *_pfnShootProjectile = nullptr;
 void *_pfnPreparePropelledProjectile = nullptr;
 void *_pfnGetEntityInfoPosition = nullptr;
+// global helpers, used by src/Common.cpp
+void *_pfnSendToTarget = nullptr;
+void *_pfnSendInRange = nullptr;
+void *_pfnPrintCenterMessage = nullptr;
 
 bool InitEnemyBase(char *strError, size_t ctError)
 {
@@ -53,6 +57,8 @@ bool InitEnemyBase(char *strError, size_t ctError)
     { 0x34790, { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68 }, &_pfnShootProjectile },
     { 0x344B0, { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xB0 }, &_pfnPreparePropelledProjectile },
     { 0x01A60, { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C }, &_pfnGetEntityInfoPosition },
+    { 0x01BE0, { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68 }, &_pfnSendToTarget },
+    { 0x01DA0, { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68 }, &_pfnSendInRange },
   };
   for (const CodeRef &cr : acr) {
     const UBYTE *pub = (const UBYTE *)(ulBase + cr.ulRVA);
@@ -61,6 +67,16 @@ bool InitEnemyBase(char *strError, size_t ctError)
       return false;
     }
     *cr.ppfn = (void *)pub;
+  }
+  // PrintCenterMessage: AlphaFixes hooks it (chainfix.cpp), which replaces its
+  // first bytes, so it is recognized by its warning text, pushed at +0x29.
+  {
+    const UBYTE *pub = (const UBYTE *)(ulBase + 0x06620);
+    if (pub[0x29] != 0x68 || *(const ULONG *)(pub + 0x2A) != ulBase + 0xD746C) {
+      snprintf(strError, ctError, "unexpected code in Entities.dll at RVA 06620");
+      return false;
+    }
+    _pfnPrintCenterMessage = (void *)pub;
   }
 
   // The vtable must be the one CEnemyBase's constructor installs: its
