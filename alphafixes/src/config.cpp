@@ -136,6 +136,7 @@ void LoadConfig(bool bWriteBack)
   g_cfg.bUnlockCannon = ReadInt("Gameplay", "UnlockCannon", def.bUnlockCannon) != 0;
   g_cfg.bTfeThirdPerson = ReadInt("Gameplay", "TfeThirdPerson", def.bTfeThirdPerson) != 0;
   g_cfg.bMenuPause = ReadInt("Gameplay", "MenuPause", def.bMenuPause) != 0;
+  g_cfg.bTriggerChainFix = ReadInt("Gameplay", "TriggerChainFix", def.bTriggerChainFix) != 0;
 
   g_cfg.bPropertyGrid = ReadInt("Editor", "PropertyGrid", def.bPropertyGrid) != 0;
 
@@ -185,6 +186,7 @@ void SaveConfig()
   WriteInt("Gameplay", "UnlockCannon", g_cfg.bUnlockCannon);
   WriteInt("Gameplay", "TfeThirdPerson", g_cfg.bTfeThirdPerson);
   WriteInt("Gameplay", "MenuPause", g_cfg.bMenuPause);
+  WriteInt("Gameplay", "TriggerChainFix", g_cfg.bTriggerChainFix);
 
   WriteInt("Editor", "PropertyGrid", g_cfg.bPropertyGrid);
 }

@@ -49,6 +49,17 @@ void UpdateLateHooks()
   InstallWeaponsEntitiesHooks();
   InstallCrosshairEntitiesHooks();
   InstallThirdPersonEntitiesHooks();
+  InstallTriggerChainFix(hEntities);
+}
+
+// The World Editor's engine loaded Entities.dll (editor.cpp watches for it).
+void InstallEditorEntitiesFixes(HMODULE hEntities)
+{
+  if (ModuleTimestamp(hEntities) != ENTITIES_TIMESTAMP) {
+    Log("Entities.dll is not the 13 Jan 2000 build; fixes for it are off");
+    return;
+  }
+  InstallTriggerChainFix(hEntities);
 }
 
 extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)

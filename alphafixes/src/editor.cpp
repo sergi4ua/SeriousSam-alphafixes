@@ -783,6 +783,23 @@ void InstallObjImport(void)
   _hhkMenuRename = SetWindowsHookExA(WH_CALLWNDPROC, MenuRenameHook, NULL, GetCurrentThreadId());
 }
 
+/* ---------------------------------------------------------------------- */
+/* Entities.dll                                                            */
+/* ---------------------------------------------------------------------- */
+
+/* The game installs its Entities.dll fixes from its frame loop once the DLL
+   is there; the editor has no such loop, so the engine's LoadLibraryA import
+   tells when it loads Entities.dll (for the first world or class). */
+typedef HMODULE (WINAPI *LoadLibraryA_t)(LPCSTR strFile);
+LoadLibraryA_t _pfnEngineLoadLibraryA = NULL;
+
+HMODULE WINAPI EngineLoadLibraryA(LPCSTR strFile)
+{
+  HMODULE hModule = _pfnEngineLoadLibraryA(strFile);
+  if (hModule != NULL && hModule == GetModuleHandleA("Entities.dll")) InstallEditorEntitiesFixes(hModule);
+  return hModule;
+}
+
 }  // namespace
 
 void InstallEditorFixes()
@@ -797,4 +814,7 @@ void InstallEditorFixes()
   Log("OBJ import: %s", _bObjImportInstalled ? "installed" : "code differs, not installed");
   if (g_cfg.bPropertyGrid) Log("Property grid: %s", InstallPropertyGrid() ? "installed" : "code differs, not installed");
   else Log("Property grid: off");
+  _pfnEngineLoadLibraryA = (LoadLibraryA_t)HookImport(GetModuleHandleA("Engine.dll"), "KERNEL32.dll", "LoadLibraryA",
+                                                      (void *)EngineLoadLibraryA);
+  if (_pfnEngineLoadLibraryA == NULL) Log("Entities.dll fixes: the engine's LoadLibraryA import not found, not installed");
 }

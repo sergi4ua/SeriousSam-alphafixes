@@ -78,6 +78,7 @@ struct Config {
   bool  bUnlockCannon = true;          // the cannon can be picked up and selected (see cannon.cpp)
   bool  bTfeThirdPerson = true;        // third-person camera like The First Encounter's (see thirdperson.cpp)
   bool  bMenuPause = true;             // the menu pauses a game with every player on this computer (see pause.cpp)
+  bool  bTriggerChainFix = true;       // trigger messages reach a player when none started the chain (see chainfix.cpp)
 
   // [Editor]
   bool  bPropertyGrid = true;          // World Editor: all properties in one grid (see propgrid.cpp)
@@ -204,6 +205,10 @@ void InstallEditorFixes();
 
 // propgrid.cpp (WorldEditor.exe)
 bool InstallPropertyGrid();
+
+// chainfix.cpp (game and World Editor)
+void InstallTriggerChainFix(HMODULE hEntities);
+void InstallEditorEntitiesFixes(HMODULE hEntities);   // main.cpp: the editor loaded Entities.dll
 
 // testaids.cpp
 #if AF_TEST_AIDS
