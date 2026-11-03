@@ -72,6 +72,7 @@ struct Config {
   bool  bStreamFix = true;             // file streams on 64-bit Windows (see streamfix.cpp)
   bool  bLightFix = true;              // crashes on lights that were never set up (see lightfix.cpp)
   bool  bHideNotPrecached = true;      // no "Not precached" console messages (see texts.cpp)
+  bool  bFieldBrushFix = true;         // fields made with Room off work (see fieldfix.cpp)
   bool  bOwnSettingsFile = true;       // the game keeps its own PersistentSymbols file (see settingsfile.cpp)
 
   // [Gameplay]
@@ -154,6 +155,9 @@ bool IsOverlayContext(HGLRC hglrc);           // the settings window's own GL co
 
 // streamfix.cpp
 void InstallStreamFix();
+
+// fieldfix.cpp (game and World Editor)
+void InstallFieldBrushFix();
 
 // lightfix.cpp
 void InstallLightFix();
