@@ -41,6 +41,7 @@ typedef unsigned long COLOR;
 #define ASSERT(expr) ((void)0)
 #endif
 #define ASSERTMSG(expr, msg) ((void)0)
+#define ASSERTALWAYS(msg) ((void)0)
 #define ARRAYCOUNT(array) (sizeof(array) / sizeof((array)[0]))
 
 inline FLOAT AngleDeg(FLOAT fDegrees) { return fDegrees; }
@@ -77,6 +78,7 @@ public:
   // dot product
   Type operator%(const Vector &v) const { Type t = 0; for (int i = 0; i < iDimensions; i++) t += vector[i] * v.vector[i]; return t; }
   Type Length(void) const { return (Type)sqrt(*this % *this); }
+  Vector &Normalize(void) { Type l = Length(); if (l > Type(0)) *this *= Type(1) / l; return *this; }
   // largest absolute component
   Type MaxNorm(void) const { Type t = 0; for (int i = 0; i < iDimensions; i++) t = Max(t, Abs(vector[i])); return t; }
 };
@@ -145,6 +147,13 @@ public:
 
 class CTFileName : public CTString {};
 
+// the game's clock
+class CTimer {
+public:
+  ENGINE_API const TIME CurrentTick(void) const;   // time of the tick being run
+};
+ENGINE_API extern CTimer *_pTimer;
+
 // --- forward declarations of engine classes used only by reference ---------
 
 class CTStream;
@@ -165,9 +174,25 @@ struct EntityStats;
 
 // --- models and sounds -----------------------------------------------------
 
-class CModelObject {
+// The model object's CAnimObject part is at its start: the alpha calls
+// CAnimObject::PlayAnim with the model object's own pointer.
+class CAnimObject {
+public:
+  ENGINE_API void PlayAnim(INDEX iNewAnim, ULONG ulFlags);
+};
+
+class CAttachmentModelObject;
+class CModelObject : public CAnimObject {
 public:
   ENGINE_API void StretchModel(const FLOAT3D &vStretchFactor);
+  ENGINE_API CAttachmentModelObject *GetAttachmentModel(INDEX iAttachedPosition);   // NULL if none
+  ENGINE_API void RemoveAttachmentModel(INDEX iAttachedPosition);
+};
+
+class CAttachmentModelObject {
+public:
+  UBYTE amo_aubPad00[0x24];
+  CModelObject amo_moModelObject;         // 0x24
 };
 
 class CSoundObject {
@@ -333,6 +358,8 @@ static_assert(sizeof(CEntityComponent) == 20, "CEntityComponent is 20 bytes in t
 
 // physics and collision flags, as the alpha's own classes use them (enemies,
 // and Teleport and Marker for editor models)
+#define EPF_HASLUNGS        (1UL << 7)    // can drown (en_tmMaxHoldBreath)
+#define EPF_MOVABLE         (1UL << 9)
 #define EPF_MODEL_IMMATERIAL 0x00000000UL
 #define ECF_IMMATERIAL       0x00000000UL
 #define ECF_TOUCHMODEL       0x00200810UL
@@ -367,7 +394,9 @@ ENGINE_API extern CEntityPropertyEnumType DamageType_enum;
 class CEntity {
 public:
   // Members at their alpha offsets (the vtable pointer is at 0).
-  UBYTE en_aubPad04[0x10 - 0x04];
+  UBYTE en_aubPad04[0x08 - 0x04];
+  ULONG en_ulPhysicsFlags;                // 0x08
+  UBYTE en_aubPad0C[0x10 - 0x0C];
   ULONG en_ulFlags;                       // 0x10
   UBYTE en_aubPad14[0x18 - 0x14];
   INDEX en_ctReferences;                  // 0x18
@@ -378,7 +407,8 @@ public:
   CWorld *en_pwoWorld;                    // 0x70
   UBYTE en_aubPad74[0xB0 - 0x74];
   FLOAT en_fHealth;                       // 0xB0 (CLiveEntity)
-  UBYTE en_aubPadB4[0x120 - 0xB4];
+  UBYTE en_aubPadB4[0x11C - 0xB4];
+  FLOAT en_tmMaxHoldBreath;               // 0x11C (CMovableEntity)
   FLOAT en_fDensity;                      // 0x120
   UBYTE en_aubPad124[0x134 - 0x124];
   FLOAT3D en_vGravityDir;                 // 0x134 (CMovableEntity)
@@ -459,6 +489,7 @@ public:
   ENGINE_API void SetCollisionFlags(ULONG ulFlags);
   ENGINE_API void SetFlags(ULONG ulFlags);
   ULONG GetFlags(void) const { return en_ulFlags; }
+  ULONG GetPhysicsFlags(void) const { return en_ulPhysicsFlags; }
   ENGINE_API const CPlacement3D &GetPlacement(void) const;
   ENGINE_API CModelObject *GetModelObject(void);
   ENGINE_API void ModelChangeNotify(void);
@@ -492,6 +523,7 @@ public:
   ENGINE_API CEntity *CopyEntityInWorld(CEntity &enOriginal, const CPlacement3D &plOtherEntity);
 };
 static_assert(offsetof(CEntity, en_fHealth) == 0xB0, "");
+static_assert(offsetof(CEntity, en_tmMaxHoldBreath) == 0x11C, "");
 static_assert(offsetof(CEntity, en_fDensity) == 0x120, "");
 static_assert(offsetof(CEntity, en_vGravityDir) == 0x134, "");
 static_assert(offsetof(CEntity, en_fGravityA) == 0x140, "");
@@ -546,6 +578,8 @@ public:
 
   ENGINE_API void SetDesiredTranslation(const FLOAT3D &vTranslation);
   ENGINE_API void SetDesiredRotation(const ANGLE3D &aRotation);
+  ENGINE_API void GetHeadingDirection(ANGLE aAngle, FLOAT3D &vDirection);
+  ENGINE_API void GiveImpulseTranslationAbsolute(const FLOAT3D &vImpulseSpeed);
 };
 
 class CMovableModelEntity : public CMovableEntity {
@@ -556,6 +590,8 @@ public:
   ENGINE_API virtual INDEX GetCollisionBoxIndex(void);
   ENGINE_API virtual void PreMoving(void);
   ENGINE_API virtual void DoMoving(void);
+
+  ENGINE_API void ChangeCollisionBoxIndexWhenPossible(INDEX iNewIndex);
 };
 
 ENGINE_API BOOL IsOfSameClass(CEntity *pen1, CEntity *pen2);

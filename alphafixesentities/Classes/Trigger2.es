@@ -112,7 +112,7 @@ procedures:
       if (penCaused!=NULL) {
         // send the score
         EReceiveScore eScore;
-        eScore.iPoints = (INDEX)m_fScore;
+        eScore.iPoints = (FLOAT)(INDEX)m_fScore;   // whole points, as in TFE
         penCaused->SendEvent(eScore);
       }
 

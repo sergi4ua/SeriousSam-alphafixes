@@ -73,6 +73,7 @@ struct Config {
   bool  bLightFix = true;              // crashes on lights that were never set up (see lightfix.cpp)
   bool  bHideNotPrecached = true;      // no "Not precached" console messages (see texts.cpp)
   bool  bFieldBrushFix = true;         // fields made with Room off work (see fieldfix.cpp)
+  bool  bZOrderFix = true;             // brushes that cut through each other are drawn in the right order (see zorderfix.cpp)
   bool  bOwnSettingsFile = true;       // the game keeps its own PersistentSymbols file (see settingsfile.cpp)
 
   // [Gameplay]
@@ -158,6 +159,8 @@ void InstallStreamFix();
 
 // fieldfix.cpp (game and World Editor)
 void InstallFieldBrushFix();
+// zorderfix.cpp (game and World Editor)
+void InstallZOrderFix();
 
 // lightfix.cpp
 void InstallLightFix();

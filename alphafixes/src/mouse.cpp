@@ -273,6 +273,15 @@ bool InstallMouseFixes()
 //
 // The sum is where the player will be looking once the game catches up, so the
 // view follows the mouse at once and doesn't move again when the ticks arrive.
+//
+// The turn is added where the game adds it: to the eye's heading and pitch
+// relative to the body (CPlayer::ApplyAction hands the heading on to the body,
+// which turns about its own up axis), and the eye is put on the body at its
+// current orientation, with rotation matrices.  Adding it to the view's world
+// angles, as this did at first, is only right for an upright body: flying
+// (plrCheat_bFly, the body pitches with the view and banks) or walking on a
+// wall under other gravity tilts the body, and the view went off in another
+// direction (with the body pitched 78 degrees, up to 90 degrees off).
 // Only the drawn view changes: aiming, shooting and everything else the game
 // computes still use the game's own orientation, as do demos and network games.
 //
@@ -305,7 +314,7 @@ constexpr uintptr_t ENT_RAY_RENDERPARTICLES = 0x601EE380; // CGhostBusterRay::Re
 constexpr size_t EN_RENDERTYPE = 0x4;                  // 3: model in the world
 constexpr size_t EN_FLAGS = 0x10;                      // ENF_ALIVE = 8
 constexpr size_t EN_PLACEMENT_ANGLES = 0x28;           // en_plPlacement (+0x1C): heading, pitch, banking
-constexpr size_t EN_LASTPLACEMENT_ANGLES = 0x17C;      // en_plLastPlacement (+0x170)
+constexpr size_t EN_GETLERPEDPLACEMENT = 0x30;         // vtable: CPlacement3D GetLerpedPlacement(void) const
 constexpr size_t PL_VIEW_ANGLES = 0x2D0;               // eye placement relative to the body (+0x2C4)
 constexpr size_t PL_LASTVIEW_ANGLES = 0x2E8;           // the same before the last action (+0x2DC)
 constexpr size_t PL_VIEWMODE = 0x330;                  // 0: first person
@@ -335,6 +344,8 @@ using GetViewPlacement_t = void(__fastcall *)(char *pen, void *pvEdx, float *ppl
 using IsPaused_t = BOOL(__fastcall *)(void *pNetwork, void *pvEdx);
 using RenderParticles_t = void(__fastcall *)(char *pen, void *pvEdx);
 using MakeRotationMatrix_t = void(__cdecl *)(float *pm, const float *pa);
+using DecomposeRotationMatrix_t = void(__cdecl *)(float *pa, const float *pm);
+using GetLerpedPlacement_t = float *(__fastcall *)(char *pen, void *pvEdx, float *pplResult);
 
 CreateAction_t _pfnCreateAction = nullptr;
 ApplyAction_t _pfnApplyAction = nullptr;
@@ -342,6 +353,7 @@ GetViewPlacement_t _pfnGetViewPlacement = nullptr;
 IsPaused_t _pfnIsPaused = nullptr;
 RenderParticles_t _pfnRayRenderParticles = nullptr;
 MakeRotationMatrix_t _pfnMakeRotationMatrix = nullptr;
+DecomposeRotationMatrix_t _pfnDecomposeRotationMatrix = nullptr;
 void **_ppNetwork = nullptr;
 char **_ppTimer = nullptr;
 float _fTickQuantum = 0.05f;
@@ -454,49 +466,73 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
   _pfnGetViewPlacement(pen, pvEdx, ppl);
   _penViewer = pen;
   _bViewCorrected = false;
-  if (!g_cfg.bLowLatencyLook || _ppTimer == nullptr || *_ppTimer == nullptr) return;
+  if (!g_cfg.bLowLatencyLook || _ppTimer == nullptr || *_ppTimer == nullptr || _pfnMakeRotationMatrix == nullptr
+   || _pfnDecomposeRotationMatrix == nullptr) return;
   if (*(int *)(pen + EN_RENDERTYPE) != 3 || !(*(ULONG *)(pen + EN_FLAGS) & 8) || *(int *)(pen + PL_VIEWMODE) != 0) return;
   if (_ctActionsLastTick > 1 || IsPaused()) return;    // split screen: the mouse isn't the only one turning
 
-  // (1) what the interpolation hasn't shown yet of the last tick: body plus eye
+  // The game's view is the eye placement (relative to the body, interpolated, then bobbed and banked by
+  // the animator) put on the body's interpolated placement.  The eye's rotation relative to that body,
+  // mBody^T * mGame (CPlacement3D::AbsoluteToRelative would snap the angles to 0.25 degrees):
+  float *pfAngles = ppl + 3;   // CPlacement3D: position, then heading, pitch, banking
+  const float afOld[3] = { pfAngles[0], pfAngles[1], pfAngles[2] };
+  float plBody[6], mBodyLerp[9], mGame[9], mEyeRel[9], afEye[3];
+  ((GetLerpedPlacement_t)(*(void ***)pen)[EN_GETLERPEDPLACEMENT / 4])(pen, nullptr, plBody);
+  _pfnMakeRotationMatrix(mBodyLerp, plBody + 3);
+  _pfnMakeRotationMatrix(mGame, afOld);
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 3; k++) {
+      mEyeRel[i * 3 + k] = mBodyLerp[i] * mGame[k] + mBodyLerp[3 + i] * mGame[3 + k] + mBodyLerp[6 + i] * mGame[6 + k];
+    }
+  }
+  _pfnDecomposeRotationMatrix(afEye, mEyeRel);
+
+  // (1) what the interpolation hasn't shown yet of the last tick: the eye's part here, the body's by
+  // drawing it at its current orientation below
   float fLerp = *(float *)(*_ppTimer + TIMER_LERPFACTOR);
   fLerp = fLerp < 0.0f ? 0.0f : (fLerp > 1.0f ? 1.0f : fLerp);
-  const float *pfBody = (const float *)(pen + EN_PLACEMENT_ANGLES);
-  const float *pfBodyLast = (const float *)(pen + EN_LASTPLACEMENT_ANGLES);
   const float *pfEye = (const float *)(pen + PL_VIEW_ANGLES);
   const float *pfEyeLast = (const float *)(pen + PL_LASTVIEW_ANGLES);
-  float fRestH = (1.0f - fLerp) * (NormalizeAngle(pfBody[0] - pfBodyLast[0]) + NormalizeAngle(pfEye[0] - pfEyeLast[0]));
-  float fRestP = (1.0f - fLerp) * (NormalizeAngle(pfBody[1] - pfBodyLast[1]) + (pfEye[1] - pfEyeLast[1]));
+  float fRestH = (1.0f - fLerp) * NormalizeAngle(pfEye[0] - pfEyeLast[0]);
+  float fRestP = (1.0f - fLerp) * (pfEye[1] - pfEyeLast[1]);
 
   // (2) to (4)
   float fPendingH, fPendingP;
   PendingTurn(fPendingH, fPendingP);
 
-  float *pfAngles = ppl + 3;   // CPlacement3D: position, then heading, pitch, banking
-  float fOldH = pfAngles[0], fOldP = pfAngles[1];
-  pfAngles[0] = NormalizeAngle(pfAngles[0] + ClampAbs(fRestH + fPendingH, 90.0f));
-  pfAngles[1] = ClampAbs(pfAngles[1] + ClampAbs(fRestP + fPendingP, 90.0f), 90.0f);   // the game limits pitch to 90
+  // The mouse turns the eye relative to the body (CPlayer::ApplyAction adds the action's rotation to
+  // the eye; the heading is then handed on to the body, which turns about its own up axis), so the
+  // turn goes on the eye there.  The body's world angles can't take it: under other gravity, or
+  // flying, the body is tilted, and its heading, pitch and banking no longer mean the same turns.
+  afEye[0] = NormalizeAngle(afEye[0] + ClampAbs(fRestH + fPendingH, 90.0f));
+  afEye[1] = ClampAbs(afEye[1] + ClampAbs(fRestP + fPendingP, 90.0f), 90.0f);   // the game limits pitch to 90
+
+  // the view: the eye on the body at its current orientation; the position stays the game's
+  float mBody[9], mEye[9], mDrawn[9];
+  _pfnMakeRotationMatrix(mBody, (const float *)(pen + EN_PLACEMENT_ANGLES));
+  _pfnMakeRotationMatrix(mEye, afEye);
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 3; k++) {
+      mDrawn[i * 3 + k] = mBody[i * 3] * mEye[k] + mBody[i * 3 + 1] * mEye[3 + k] + mBody[i * 3 + 2] * mEye[6 + k];
+    }
+  }
+  _pfnDecomposeRotationMatrix(pfAngles, mDrawn);
 
   // for the ghostbuster's ray: the turn from the game's view to this one, mDrawn * mGame^T
-  if (_pfnMakeRotationMatrix != nullptr) {
-    const float afGame[3] = { fOldH, fOldP, pfAngles[2] };
-    float mGame[9], mDrawn[9];
-    _pfnMakeRotationMatrix(mGame, afGame);
-    _pfnMakeRotationMatrix(mDrawn, pfAngles);
-    for (int i = 0; i < 3; i++) {
-      for (int k = 0; k < 3; k++) {
-        _amViewTurn[i * 3 + k] = mDrawn[i * 3] * mGame[k * 3] + mDrawn[i * 3 + 1] * mGame[k * 3 + 1] + mDrawn[i * 3 + 2] * mGame[k * 3 + 2];
-      }
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 3; k++) {
+      _amViewTurn[i * 3 + k] = mDrawn[i * 3] * mGame[k * 3] + mDrawn[i * 3 + 1] * mGame[k * 3 + 1] + mDrawn[i * 3 + 2] * mGame[k * 3 + 2];
     }
-    memcpy(_afViewEye, ppl, sizeof(_afViewEye));
-    _bViewCorrected = true;
   }
+  memcpy(_afViewEye, ppl, sizeof(_afViewEye));
+  _bViewCorrected = true;
   if (_bLogMouse) {
     LARGE_INTEGER ll, llFreq;
     QueryPerformanceCounter(&ll);
     QueryPerformanceFrequency(&llFreq);
-    Log("View %.1f ms: heading %.2f -> %.2f (lerp %.2f, rest %.2f, pending %.2f), pitch %.2f -> %.2f",
-        ll.QuadPart * 1000.0 / llFreq.QuadPart, fOldH, pfAngles[0], fLerp, fRestH, fPendingH, fOldP, pfAngles[1]);
+    Log("View %.1f ms: hpb %.2f %.2f %.2f -> %.2f %.2f %.2f (lerp %.2f, rest %.2f %.2f, pending %.2f %.2f)",
+        ll.QuadPart * 1000.0 / llFreq.QuadPart, afOld[0], afOld[1], afOld[2], pfAngles[0], pfAngles[1], pfAngles[2],
+        fLerp, fRestH, fRestP, fPendingH, fPendingP);
   }
 }
 
@@ -535,6 +571,7 @@ bool InstallMouseLook()
   _pfnIsPaused = (IsPaused_t)EngineProc("?IsPaused@CNetworkLibrary@@QAEHXZ");
   if (const float *pf = (const float *)EngineProc("?TickQuantum@CTimer@@2MB")) _fTickQuantum = *pf;
   _pfnMakeRotationMatrix = (MakeRotationMatrix_t)EngineProc("?MakeRotationMatrixFast@@YAXAAV?$Matrix@M$02$02@@ABV?$Vector@M$02@@@Z");
+  _pfnDecomposeRotationMatrix = (DecomposeRotationMatrix_t)EngineProc("?DecomposeRotationMatrixNoSnap@@YAXAAV?$Vector@M$02@@ABV?$Matrix@M$02$02@@@Z");
   void *pCreateAction = GetProcAddress(GetModuleHandleA("Game.dll"), "?CreateAction@CControls@@QAEXAAVCPlayerAction@@@Z");
   return HookFunction(pCreateAction, (void *)CreateAction_Hook, (void **)&_pfnCreateAction, "CControls::CreateAction");
 }

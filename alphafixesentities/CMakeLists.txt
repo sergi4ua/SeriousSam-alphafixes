@@ -36,7 +36,7 @@ endforeach()
 add_custom_target(AlphaImportLibs DEPENDS ${AFE_IMPORT_LIBS})
 
 # Entity classes: one .es each in Classes\, compiled by the alpha's Ecc.exe.
-set(AFE_CLASSES RobotDriving Copier Damager Trigger2)
+set(AFE_CLASSES RobotDriving Copier Damager Trigger2 Catman Horse)
 set(AFE_GENDIR "${CMAKE_CURRENT_BINARY_DIR}/gen")
 foreach(cls ${AFE_CLASSES})
   set(es "${CMAKE_CURRENT_SOURCE_DIR}/Classes/${cls}.es")

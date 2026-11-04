@@ -132,6 +132,7 @@ void LoadConfig(bool bWriteBack)
   g_cfg.bLightFix = ReadInt("Fixes", "LightFix", def.bLightFix) != 0;
   g_cfg.bHideNotPrecached = ReadInt("Fixes", "HideNotPrecached", def.bHideNotPrecached) != 0;
   g_cfg.bFieldBrushFix = ReadInt("Fixes", "FieldBrushFix", def.bFieldBrushFix) != 0;
+  g_cfg.bZOrderFix = ReadInt("Fixes", "ZOrderFix", def.bZOrderFix) != 0;
   g_cfg.bOwnSettingsFile = ReadInt("Fixes", "OwnSettingsFile", def.bOwnSettingsFile) != 0;
 
   g_cfg.bUnlockCannon = ReadInt("Gameplay", "UnlockCannon", def.bUnlockCannon) != 0;
@@ -183,6 +184,7 @@ void SaveConfig()
   WriteInt("Fixes", "LightFix", g_cfg.bLightFix);
   WriteInt("Fixes", "HideNotPrecached", g_cfg.bHideNotPrecached);
   WriteInt("Fixes", "FieldBrushFix", g_cfg.bFieldBrushFix);
+  WriteInt("Fixes", "ZOrderFix", g_cfg.bZOrderFix);
   WriteInt("Fixes", "OwnSettingsFile", g_cfg.bOwnSettingsFile);
 
   WriteInt("Gameplay", "UnlockCannon", g_cfg.bUnlockCannon);

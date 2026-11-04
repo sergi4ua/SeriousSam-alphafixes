@@ -73,9 +73,11 @@ static_assert(sizeof(EStart) == 0x0C, "EStart is 12 bytes in the alpha");
 
 // points for the player (the alpha has no ESecretFound)
 #define EVENTCODE_EReceiveScore 0x0000000C
+// The alpha's points are a FLOAT, as CEnemyBase::m_iScore is: the Player adds
+// them with fadd (Entities.dll 602100C9).
 class EReceiveScore : public CEntityEvent {
 public:
-  INDEX iPoints;                   // 0x08
+  FLOAT iPoints;                   // 0x08
   ENTITIES_API EReceiveScore(void);
   ENTITIES_API virtual ~EReceiveScore();
   ENTITIES_API virtual CEntityEvent *MakeCopy(void);
@@ -143,4 +145,17 @@ inline void AddAttachmentToModel(CEntity *pen, CModelObject &mo, INDEX iAttachme
   pen->AddAttachment(iAttachment, ulIDModel, ulIDTexture);
   if (ulIDReflectionTexture > 0) pen->SetModelAttachmentReflectionTexture(iAttachment, ulIDReflectionTexture);
   if (ulIDSpecularTexture > 0) pen->SetModelAttachmentSpecularTexture(iAttachment, ulIDSpecularTexture);
+}
+
+inline void RemoveAttachmentFromModel(CModelObject &mo, INDEX iAttachment)
+{
+  mo.RemoveAttachmentModel(iAttachment);
+}
+
+// pushes an entity that can be moved, as the later SDK's KickEntity()
+inline void KickEntity(CEntity *penTarget, FLOAT3D vSpeed)
+{
+  if (penTarget != nullptr && (penTarget->GetPhysicsFlags() & EPF_MOVABLE)) {
+    ((CMovableEntity *)penTarget)->GiveImpulseTranslationAbsolute(vSpeed);
+  }
 }

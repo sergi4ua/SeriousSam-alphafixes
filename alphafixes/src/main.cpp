@@ -83,6 +83,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
     InstallStreamFix();
     InstallLightFix();
     InstallFieldBrushFix();
+    InstallZOrderFix();
     InstallHideNotPrecached();
     InstallEditorFixes();
     return TRUE;
@@ -101,6 +102,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   InstallStreamFix();
   InstallLightFix();
   InstallFieldBrushFix();
+  InstallZOrderFix();
   InstallTextFixes();
   InstallGameSettingsFile();
   InstallGraphicsOptions();
