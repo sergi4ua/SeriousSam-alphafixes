@@ -16,6 +16,11 @@
 //  - After CPlayer::RenderHUD (0x6020DE40), while the weapon being switched to
 //    changed in the last moment, a row of the player's weapons is drawn above
 //    the HUD's bottom bar with the HUD's own icons, the selected one marked.
+//    Two styles ([Weapons] WeaponBar): Tiles puts each icon on a dark tile,
+//    the selected one green, sized by the HUD scale; Clean draws the icons
+//    alone with a soft shadow, the selected one yellow and larger, sized by the
+//    screen height (a 480-line screen is the original size) so it looks the
+//    same at any resolution and aspect ratio.
 #include "alphafixes.h"
 
 namespace {
@@ -99,6 +104,46 @@ ULONG WithAlpha(ULONG col, float fAlpha)
   return (col & 0xFFFFFF00) | (a > 255 ? 255 : a);
 }
 
+void PutIcon(char *pen, void *pdp, int iWeapon, long x, long y, long pixSize, ULONG col)
+{
+  void *ptd = _pfnGetTextureData(pen, nullptr, _aulIconComponent[iWeapon]);
+  if (ptd == nullptr) return;
+  if (ptd != _apvIconData[iWeapon]) {
+    _pfnSetData(_aubIcons[iWeapon], nullptr, ptd);
+    _apvIconData[iWeapon] = ptd;
+  }
+  const long abox[4] = { x, y, x + pixSize, y + pixSize };   // PIXaabbox2D: min, max
+  _pfnPutTexture(pdp, nullptr, _aubIcons[iWeapon], abox, col);
+}
+
+// The Clean style: no tiles, a shadow under each icon, the selected icon yellow and larger.
+void DrawCleanBar(char *pen, char *ppw, void *pdp, const int *aiWeapons, int ctWeapons, int iWanted,
+                  long pixW, long pixH, float fAlpha)
+{
+  float fScale = pixH / 480.0f;
+  // narrower than the row (all weapons, below 5:4): shrink it to fit
+  float fRowWidth = (ctWeapons - 1) * (28.0f + 10.0f) + 36.0f;
+  if (fRowWidth * fScale > pixW * 0.96f) fScale = pixW * 0.96f / fRowWidth;
+  long pixIcon = (long)(28.0f * fScale + 0.5f);
+  long pixSelected = (long)(36.0f * fScale + 0.5f);
+  long pixGap = (long)(10.0f * fScale + 0.5f);
+  long pixShadow = (long)(1.5f * fScale + 0.5f);
+  if (pixShadow < 1) pixShadow = 1;
+  long pixTotal = (ctWeapons - 1) * (pixIcon + pixGap) + pixSelected;
+  long x = (pixW - pixTotal) / 2;
+  long yBottom = pixH - (long)(44.0f * fScale + 0.5f);   // above the HUD's bottom bar
+  for (int i = 0; i < ctWeapons; i++) {
+    int iWeapon = aiWeapons[i];
+    bool bSelected = iWeapon == iWanted;
+    long pixSize = bSelected ? pixSelected : pixIcon;
+    long y = yBottom - pixSize;
+    ULONG col = bSelected ? 0xFFD830FF : _pfnHasAmmo(ppw, nullptr, iWeapon) ? 0xE0E0E0B0 : 0xFF505090;
+    PutIcon(pen, pdp, iWeapon, x + pixShadow, y + pixShadow, pixSize, WithAlpha(0x00000090, fAlpha));
+    PutIcon(pen, pdp, iWeapon, x, y, pixSize, WithAlpha(col, fAlpha));
+    x += pixSize + pixGap;
+  }
+}
+
 void DrawWeaponBar(char *pen)
 {
   char *ppw = *(char **)(pen + PL_WEAPONS);
@@ -127,8 +172,12 @@ void DrawWeaponBar(char *pen)
   }
   if (ctWeapons == 0) return;
 
-  float fScale = *(float *)RebaseEntities(ENT_HUD_SCALE);
   long pixW = *(long *)RebaseEntities(ENT_HUD_WIDTH), pixH = *(long *)RebaseEntities(ENT_HUD_HEIGHT);
+  if (g_cfg.iWeaponBar == WEAPONBAR_CLEAN) {
+    DrawCleanBar(pen, ppw, pdp, aiWeapons, ctWeapons, iWanted, pixW, pixH, fAlpha);
+    return;
+  }
+  float fScale = *(float *)RebaseEntities(ENT_HUD_SCALE);
   long pixIcon = (long)(32.0f * fScale + 0.5f);
   long pixGap = (long)(8.0f * fScale + 0.5f);
   long pixPad = (long)(3.0f * fScale + 0.5f);
@@ -142,22 +191,15 @@ void DrawWeaponBar(char *pen)
     bool bAmmo = _pfnHasAmmo(ppw, nullptr, iWeapon) != 0;
     _pfnFill(pdp, nullptr, x - pixPad, y - pixPad, pixIcon + 2 * pixPad, pixIcon + 2 * pixPad,
              WithAlpha(bSelected ? 0x7FFF7F00 | 0x70 : 0x00000060, fAlpha));
-    void *ptd = _pfnGetTextureData(pen, nullptr, _aulIconComponent[iWeapon]);
-    if (ptd == nullptr) continue;
-    if (ptd != _apvIconData[iWeapon]) {
-      _pfnSetData(_aubIcons[iWeapon], nullptr, ptd);
-      _apvIconData[iWeapon] = ptd;
-    }
-    const long abox[4] = { x, y, x + pixIcon, y + pixIcon };   // PIXaabbox2D: min, max
     ULONG col = bSelected ? 0xFFFFFFFF : bAmmo ? 0xFFFFFFA0 : 0xFF6060A0;
-    _pfnPutTexture(pdp, nullptr, _aubIcons[iWeapon], abox, WithAlpha(col, fAlpha));
+    PutIcon(pen, pdp, iWeapon, x, y, pixIcon, WithAlpha(col, fAlpha));
   }
 }
 
 void __fastcall RenderHUD_Hook(char *pen, void *pvEdx)
 {
   _pfnRenderHUD(pen, pvEdx);
-  if (g_cfg.bWeaponBar) DrawWeaponBar(pen);
+  if (g_cfg.iWeaponBar != WEAPONBAR_OFF) DrawWeaponBar(pen);
 }
 
 }  // namespace

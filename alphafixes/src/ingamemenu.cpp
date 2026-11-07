@@ -86,6 +86,7 @@ const char *const _astrFov[] = { "75", "80", "85", "90", "95", "100", "105", "11
 const char *const _astrWheel[] = { "Off", "Weapons" };
 const char *const _astrWheelUp[] = { "Next", "Previous" };
 const char *const _astrThirdPerson[] = { "Alpha", "TFE" };
+const char *const _astrWeaponBar[] = { "Off", "Tiles", "Clean" };
 
 int IndexOfPow2(int i, int iFirst)   // 1/0 -> 0, then 2 -> 1, 4 -> 2 ...
 {
@@ -119,7 +120,7 @@ const Row _aMouseRows[] = {
   { "Low-latency look", _astrOffOn, 2, [] { return g_cfg.bLowLatencyLook ? 1 : 0; }, [](int i) { g_cfg.bLowLatencyLook = i != 0; } },
   { "Mouse wheel", _astrWheel, 2, [] { return g_cfg.bWheelWeapons ? 1 : 0; }, [](int i) { g_cfg.bWheelWeapons = i != 0; } },
   { "Wheel up", _astrWheelUp, 2, [] { return g_cfg.bWheelInvert ? 1 : 0; }, [](int i) { g_cfg.bWheelInvert = i != 0; } },
-  { "Weapon bar", _astrOffOn, 2, [] { return g_cfg.bWeaponBar ? 1 : 0; }, [](int i) { g_cfg.bWeaponBar = i != 0; } },
+  { "Weapon bar", _astrWeaponBar, 3, [] { return g_cfg.iWeaponBar; }, [](int i) { g_cfg.iWeaponBar = i; } },
   { "Third person", _astrThirdPerson, 2, [] { return g_cfg.bTfeThirdPerson ? 1 : 0; }, [](int i) { g_cfg.bTfeThirdPerson = i != 0; } },
 };
 

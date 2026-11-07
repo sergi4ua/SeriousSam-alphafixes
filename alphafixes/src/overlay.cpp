@@ -282,7 +282,12 @@ void MouseSection()
   HelpMarker("Wheel up: next weapon, wheel down: previous (Invert swaps them), among the weapons you have ammo for.");
   ImGui::SameLine();
   ImGui::Checkbox("Invert", &g_cfg.bWheelInvert);
-  ImGui::Checkbox("Show the weapons in the HUD when switching", &g_cfg.bWeaponBar);
+  {
+    static const char *const astrBar[] = { "Off", "Tiles", "Clean" };
+    ImGui::Combo("Weapon bar", &g_cfg.iWeaponBar, astrBar, 3);
+    HelpMarker("Shows your weapons in the HUD when switching.  Tiles: on dark tiles, the selected one green.  "
+               "Clean: no background, the selected one yellow, sized by the screen height.");
+  }
   ImGui::Checkbox("Fixed crosshair", &g_cfg.bFixedCrosshair);
   HelpMarker("Keeps the crosshair in the middle of the screen.  The game moves it to where the weapon's "
              "ray hits, so it jumps around near walls and edges.  Size and colour still show what you aim at.");

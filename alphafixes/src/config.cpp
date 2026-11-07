@@ -115,7 +115,13 @@ void LoadConfig(bool bWriteBack)
 
   g_cfg.bWheelWeapons = ReadInt("Weapons", "MouseWheel", def.bWheelWeapons) != 0;
   g_cfg.bWheelInvert = ReadInt("Weapons", "InvertWheel", def.bWheelInvert) != 0;
-  g_cfg.bWeaponBar = ReadInt("Weapons", "WeaponBar", def.bWeaponBar) != 0;
+  g_cfg.iWeaponBar = ReadInt("Weapons", "WeaponBar", def.iWeaponBar);
+  if (g_cfg.iWeaponBar < WEAPONBAR_OFF || g_cfg.iWeaponBar > WEAPONBAR_CLEAN) g_cfg.iWeaponBar = def.iWeaponBar;
+  {
+    char strBanner[256];
+    GetPrivateProfileStringA("Menu", "Banner", def.strMenuBanner.c_str(), strBanner, sizeof(strBanner), IniPath().c_str());
+    g_cfg.strMenuBanner = strBanner;
+  }
   g_cfg.bFixedCrosshair = ReadInt("Weapons", "FixedCrosshair", def.bFixedCrosshair) != 0;
 
   g_cfg.iMasterVolume = ReadInt("Sound", "MasterVolume", def.iMasterVolume);
@@ -170,7 +176,8 @@ void SaveConfig()
 
   WriteInt("Weapons", "MouseWheel", g_cfg.bWheelWeapons);
   WriteInt("Weapons", "InvertWheel", g_cfg.bWheelInvert);
-  WriteInt("Weapons", "WeaponBar", g_cfg.bWeaponBar);
+  WriteInt("Weapons", "WeaponBar", g_cfg.iWeaponBar);
+  WriteString("Menu", "Banner", g_cfg.strMenuBanner.c_str());
   WriteInt("Weapons", "FixedCrosshair", g_cfg.bFixedCrosshair);
 
   WriteInt("Sound", "MasterVolume", g_cfg.iMasterVolume);

@@ -2,7 +2,9 @@
 //
 // - The menu's top line, "Evaluation version for Croteam_Test" (SeriousSam.exe
 //   prints "Evaluation version for %s" with the engine's build name), names
-//   the mod and its version instead.
+//   the mod and its version instead: [Menu] Banner, with {version} replaced by
+//   the mod's version.  The game uses the text as a CTString::PrintF format, so
+//   '%' is doubled and the length is limited.
 // - "Not precached: (0x...)'file'" is printed to the console for every file
 //   loaded during play rather than while the level was precaching (Engine.dll
 //   0x600A34B0 prints it when the precaching flag at 0x601118AC is off).  On a
@@ -17,12 +19,26 @@ constexpr uintptr_t EXE_EVALUATION_TEXT = 0x416158;     // push "Evaluation vers
 // Engine.dll (alpha build)
 constexpr uintptr_t ENG_NOT_PRECACHED_TEST = 0x600A34CF;  // je past the "Not precached" print
 
-const char _strBanner[] = AF_TITLE " " AF_VERSION " by " AF_AUTHOR;
+char _strBanner[2 * 120 + 1];   // a PrintF format: each '%' doubled
+
+void MakeBanner()
+{
+  std::string str = g_cfg.strMenuBanner;
+  for (size_t i; (i = str.find("{version}")) != std::string::npos;) str.replace(i, 9, AF_VERSION);
+  if (str.size() > 120) str.resize(120);
+  size_t ct = 0;
+  for (char ch : str) {
+    if (ch == '%') _strBanner[ct++] = '%';
+    _strBanner[ct++] = ch;
+  }
+  _strBanner[ct] = 0;
+}
 
 }  // namespace
 
 void InstallTextFixes()
 {
+  MakeBanner();
   static const BYTE aubPushOld[] = { 0x68, 0x54, 0xF3, 0x42, 0x00 };
   BYTE aubPushNew[5] = { 0x68 };
   uint32_t ulBanner = (uint32_t)(uintptr_t)_strBanner;

@@ -12,6 +12,10 @@
 #define AF_TITLE "AlphaFixes"
 #define AF_VERSION "0.6-pt1"
 #define AF_AUTHOR "Sergi4UA"
+#define AF_DEFAULT_BANNER AF_TITLE " {version} by " AF_AUTHOR
+
+// the weapon bar's styles ([Weapons] WeaponBar)
+enum { WEAPONBAR_OFF = 0, WEAPONBAR_TILES = 1, WEAPONBAR_CLEAN = 2 };
 
 // Testing aids are built only with the CMake option AF_TEST_AIDS (build.bat test).
 #ifndef AF_TEST_AIDS
@@ -53,10 +57,13 @@ struct Config {
   float fVerticalRatio = 1.0f;         // vertical sensitivity relative to horizontal
   bool  bLowLatencyLook = true;        // draw the view with mouse movement the game hasn't applied yet
 
+  // [Menu]
+  std::string strMenuBanner = AF_DEFAULT_BANNER;   // the menu's top line; {version} is AF_VERSION (see texts.cpp)
+
   // [Weapons]
   bool  bWheelWeapons = true;          // the mouse wheel switches weapons (see weapons.cpp)
   bool  bWheelInvert = false;          // wheel down for the next weapon instead of wheel up
-  bool  bWeaponBar = true;             // show the player's weapons in the HUD when switching
+  int   iWeaponBar = WEAPONBAR_TILES;  // show the player's weapons in the HUD when switching (WEAPONBAR_*)
   bool  bFixedCrosshair = false;       // crosshair in the middle of the screen (see crosshair.cpp)
 
   // [Sound]
