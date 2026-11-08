@@ -276,8 +276,13 @@ bool InstallMouseFixes()
 //
 // The turn is added where the game adds it: to the eye's heading and pitch
 // relative to the body (CPlayer::ApplyAction hands the heading on to the body,
-// which turns about its own up axis), and the eye is put on the body at its
-// current orientation, with rotation matrices.  Adding it to the view's world
+// which turns about its own up axis), and the eye is put on the body with
+// rotation matrices.  Under gravity the body is drawn interpolated, as the game draws it,
+// plus the rest of its turn about its own up axis (the mouse heading); its
+// other turns (gravity turning the player over) stay interpolated.  Drawing
+// the body at its current orientation, as this did before, showed changing
+// gravity (SphereTorus) in 20 Hz steps of up to 19 degrees.  A body gravity
+// doesn't turn (flying) is still drawn at its current orientation.  Adding it to the view's world
 // angles, as this did at first, is only right for an upright body: flying
 // (plrCheat_bFly, the body pitches with the view and banks) or walking on a
 // wall under other gravity tilts the body, and the view went off in another
@@ -313,6 +318,7 @@ constexpr uintptr_t ENT_RAY_RENDERPARTICLES = 0x601EE380; // CGhostBusterRay::Re
 
 // entity layout (alpha build)
 constexpr size_t EN_RENDERTYPE = 0x4;                  // 3: model in the world
+constexpr size_t EN_PHYSICSFLAGS = 0x8;                // EPF_ORIENTEDBYGRAVITY = 1 (cleared by plrCheat_bFly)
 constexpr size_t EN_FLAGS = 0x10;                      // ENF_ALIVE = 8
 constexpr size_t EN_PLACEMENT_ANGLES = 0x28;           // en_plPlacement (+0x1C): heading, pitch, banking
 constexpr size_t EN_GETLERPEDPLACEMENT = 0x30;         // vtable: CPlacement3D GetLerpedPlacement(void) const
@@ -512,9 +518,33 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
   afEye[0] = NormalizeAngle(afEye[0] + ClampAbs(fRestH + fPendingH, 90.0f));
   afEye[1] = ClampAbs(afEye[1] + ClampAbs(fRestP + fPendingP, 90.0f), 90.0f);   // the game limits pitch to 90
 
-  // the view: the eye on the body at its current orientation; the position stays the game's
+  // The body: interpolated as the game draws it, plus the rest of its last tick's turn about its own up
+  // axis (the mouse heading handed on to it).  The rest of the turn from the interpolated body to its
+  // current orientation is dR = mBodyLerp^T * mBodyNow; its twist about the body's y axis is
+  // atan2(dR02 - dR20, dR00 + dR22).  The remaining swing is gravity turning the body (sloped or
+  // changing gravity, as in SphereTorus): it stays interpolated, since drawing the body at its current
+  // orientation showed it in 20 Hz steps a tick ahead.  A body gravity doesn't turn (flying) turns only
+  // by the player's actions, pitch too, so then it is drawn at its current orientation.
+  bool bGravityTurns = (*(ULONG *)(pen + EN_PHYSICSFLAGS) & 1) != 0;
+  float mBodyNow[9], mRest[9];
+  _pfnMakeRotationMatrix(mBodyNow, (const float *)(pen + EN_PLACEMENT_ANGLES));
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 3; k++) {
+      mRest[i * 3 + k] = mBodyLerp[i] * mBodyNow[k] + mBodyLerp[3 + i] * mBodyNow[3 + k] + mBodyLerp[6 + i] * mBodyNow[6 + k];
+    }
+  }
+  float fTwist = atan2f(mRest[2] - mRest[6], mRest[0] + mRest[8]);
+  const float fC = cosf(fTwist), fS = sinf(fTwist);
+  const float mTwist[9] = { fC, 0.0f, fS,  0.0f, 1.0f, 0.0f,  -fS, 0.0f, fC };
+  const float *pmBodyRest = bGravityTurns ? mTwist : mRest;
+
+  // the view: the eye on that body; the position stays the game's
   float mBody[9], mEye[9], mDrawn[9];
-  _pfnMakeRotationMatrix(mBody, (const float *)(pen + EN_PLACEMENT_ANGLES));
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 3; k++) {
+      mBody[i * 3 + k] = mBodyLerp[i * 3] * pmBodyRest[k] + mBodyLerp[i * 3 + 1] * pmBodyRest[3 + k] + mBodyLerp[i * 3 + 2] * pmBodyRest[6 + k];
+    }
+  }
   _pfnMakeRotationMatrix(mEye, afEye);
   for (int i = 0; i < 3; i++) {
     for (int k = 0; k < 3; k++) {
@@ -535,9 +565,9 @@ void __fastcall GetViewPlacement_Hook(char *pen, void *pvEdx, float *ppl)
     LARGE_INTEGER ll, llFreq;
     QueryPerformanceCounter(&ll);
     QueryPerformanceFrequency(&llFreq);
-    Log("View %.1f ms: hpb %.2f %.2f %.2f -> %.2f %.2f %.2f (lerp %.2f, rest %.2f %.2f, pending %.2f %.2f)",
+    Log("View %.1f ms: hpb %.2f %.2f %.2f -> %.2f %.2f %.2f (lerp %.2f, rest %.2f %.2f, pending %.2f %.2f) physics %08lX twist %.2f",
         ll.QuadPart * 1000.0 / llFreq.QuadPart, afOld[0], afOld[1], afOld[2], pfAngles[0], pfAngles[1], pfAngles[2],
-        fLerp, fRestH, fRestP, fPendingH, fPendingP);
+        fLerp, fRestH, fRestP, fPendingH, fPendingP, *(ULONG *)(pen + EN_PHYSICSFLAGS), fTwist * 57.29578f);
   }
 }
 
