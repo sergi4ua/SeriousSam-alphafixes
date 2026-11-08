@@ -220,6 +220,10 @@ void InstallMenuPause();
 
 // editor.cpp (WorldEditor.exe)
 void InstallEditorFixes();
+void InstallModelerFixes();
+// MFC toolbar layout in its own registry section, checked before loading (barstate.cpp)
+bool InstallBarStateFix(uintptr_t addrLoadPush, uintptr_t addrLoadCall, uintptr_t addrSavePush,
+                        const BYTE aubLoadPushOld[5], const BYTE aubLoadCallOld[5], const BYTE aubSavePushOld[5]);
 
 // propgrid.cpp (WorldEditor.exe)
 bool InstallPropertyGrid();

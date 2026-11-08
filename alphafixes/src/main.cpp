@@ -1,5 +1,5 @@
 // AlphaFixes.dll entry: loaded by the winmm.dll proxy at the entry point of
-// SeriousSam.exe or WorldEditor.exe, before WinMain.  Engine.dll and the exe's
+// SeriousSam.exe, WorldEditor.exe or Modeler.exe, before WinMain.  Engine.dll and the exe's
 // other DLLs are loaded but nothing of the program has run yet.
 #include "alphafixes.h"
 
@@ -7,6 +7,7 @@ namespace {
 
 constexpr DWORD EXE_TIMESTAMP = 0x387DDACA;      // SeriousSam.exe, 13 Jan 2000
 constexpr DWORD EDITOR_TIMESTAMP = 0x387DDB2A;   // WorldEditor.exe, same build
+constexpr DWORD MODELER_TIMESTAMP = 0x387DDB4F;  // Modeler.exe, same build
 constexpr DWORD ENGINE_TIMESTAMP = 0x387DDB80;   // Engine.dll, same build
 
 DWORD ModuleTimestamp(HMODULE hModule)
@@ -86,6 +87,22 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
     InstallZOrderFix();
     InstallHideNotPrecached();
     InstallEditorFixes();
+    return TRUE;
+  }
+
+  if (dwExe == MODELER_TIMESTAMP) {
+    // the Modeler gets the engine fixes that apply there and its own (modeler.cpp)
+    LogOpen("AlphaFixes_Modeler.log");
+    Log(AF_TITLE " " AF_VERSION " (" __DATE__ ") in the Modeler");
+    if (dwEngine != ENGINE_TIMESTAMP) {
+      Log("Unknown engine build (%08lX); nothing changed", dwEngine);
+      return FALSE;
+    }
+    LoadConfig(false);
+    InstallStreamFix();
+    InstallLightFix();
+    InstallHideNotPrecached();
+    InstallModelerFixes();
     return TRUE;
   }
 

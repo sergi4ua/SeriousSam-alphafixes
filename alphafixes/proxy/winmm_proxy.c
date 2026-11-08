@@ -1,15 +1,16 @@
 /*
- * winmm.dll proxy that loads AlphaFixes.dll into SeriousSam.exe and WorldEditor.exe.
+ * winmm.dll proxy that loads AlphaFixes.dll into SeriousSam.exe, WorldEditor.exe
+ * and Modeler.exe.
  *
  * Engine.dll imports winmm.dll, and the loader looks in the game's Bin folder
  * before System32, so this DLL is loaded instead of the system one.  Every
  * export jumps straight to the real winmm.dll (same names and ordinals), so
  * the game, the editors and any system DLL that imports winmm work as before.
  *
- * In SeriousSam.exe and WorldEditor.exe only, the exe's entry point is
+ * In SeriousSam.exe, WorldEditor.exe and Modeler.exe only, the exe's entry point is
  * redirected for one call: once the loader has finished (no loader lock
  * held), AlphaFixes.dll is loaded from this folder and its AF_Init() runs,
- * then the program starts normally.  If AlphaFixes.dll is missing, both run
+ * then the program starts normally.  If AlphaFixes.dll is missing, they run
  * unmodified.
  */
 
@@ -75,6 +76,7 @@ static BOOL LoadRealWinmm(void)
 
 #define SERIOUSSAM_TIMESTAMP 0x387DDACA   /* SeriousSam.exe of 13 Jan 2000 */
 #define WORLDEDITOR_TIMESTAMP 0x387DDB2A  /* WorldEditor.exe, same build */
+#define MODELER_TIMESTAMP 0x387DDB4F      /* Modeler.exe, same build */
 
 static HMODULE _hThisDll = NULL;
 static BYTE   *_pubExeEntry = NULL;
@@ -128,7 +130,8 @@ static __declspec(naked) void EntryStub(void)
 static BOOL IsModdedExe(const BYTE *pubExe)
 {
   const IMAGE_NT_HEADERS *pnt = (const IMAGE_NT_HEADERS *)(pubExe + ((const IMAGE_DOS_HEADER *)pubExe)->e_lfanew);
-  return pnt->FileHeader.TimeDateStamp == SERIOUSSAM_TIMESTAMP || pnt->FileHeader.TimeDateStamp == WORLDEDITOR_TIMESTAMP;
+  return pnt->FileHeader.TimeDateStamp == SERIOUSSAM_TIMESTAMP || pnt->FileHeader.TimeDateStamp == WORLDEDITOR_TIMESTAMP
+      || pnt->FileHeader.TimeDateStamp == MODELER_TIMESTAMP;
 }
 
 static void HookExeEntry(void)
