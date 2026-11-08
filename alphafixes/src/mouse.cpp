@@ -298,10 +298,11 @@ bool InstallMouseFixes()
 // The ghostbuster's ray is drawn as particles from the barrel to what it hits,
 // world points the game computes with its own orientation and draws
 // interpolated.  Ahead of them, the corrected view saw the ray's start leave
-// the barrel while turning.  While the ray is drawn for the viewed player, its
-// start is turned with the view around the eye, so it stays on the barrel; its
-// end stays where the ray hits, which is where the damage goes and where the
-// game's crosshair is.
+// the barrel and its end trail behind the crosshair while turning (the
+// crosshair is cast from the drawn view, so it follows it).  While the ray is
+// drawn for the viewed player, both its start and its end are turned with the
+// view around the eye: it runs from the barrel to the crosshair, as it does
+// without the correction.  The damage still goes where the game's ray hits.
 
 namespace {
 
@@ -322,6 +323,8 @@ constexpr size_t PL_VIEWMODE = 0x330;                  // 0: first person
 constexpr size_t RAY_OWNER = 0x29C;                    // m_penOwner: the player's CPlayerWeapons
 constexpr size_t RAY_SRC_OLD = 0x2A4;                  // m_vSrcOld
 constexpr size_t RAY_SRC = 0x2BC;                      // m_vSrc
+constexpr size_t RAY_DST_OLD = 0x2B0;                  // m_vDstOld: the ray's end, before and after the last tick
+constexpr size_t RAY_DST = 0x2C8;                      // m_vDst
 constexpr size_t PW_PLAYER = 0xD0;                     // CPlayerWeapons::m_penPlayer
 // CPlayerAction: pa_aRotation (heading, pitch, banking) in degrees per second
 constexpr size_t PA_ROTATION = 0xC;
@@ -555,15 +558,16 @@ void __fastcall RayRenderParticles_Hook(char *pen, void *pvEdx)
     _pfnRayRenderParticles(pen, pvEdx);
     return;
   }
-  float *pfSrcOld = (float *)(pen + RAY_SRC_OLD), *pfSrc = (float *)(pen + RAY_SRC);
-  float afSrcOld[3], afSrc[3];
-  memcpy(afSrcOld, pfSrcOld, sizeof(afSrcOld));
-  memcpy(afSrc, pfSrc, sizeof(afSrc));
-  TurnWithView(pfSrcOld);
-  TurnWithView(pfSrc);
+  // the ray's start and end, before and after the last tick
+  static const size_t aoffPoints[] = { RAY_SRC_OLD, RAY_SRC, RAY_DST_OLD, RAY_DST };
+  float aafSaved[4][3];
+  for (int i = 0; i < 4; i++) {
+    float *pf = (float *)(pen + aoffPoints[i]);
+    memcpy(aafSaved[i], pf, sizeof(aafSaved[i]));
+    TurnWithView(pf);
+  }
   _pfnRayRenderParticles(pen, pvEdx);
-  memcpy(pfSrcOld, afSrcOld, sizeof(afSrcOld));
-  memcpy(pfSrc, afSrc, sizeof(afSrc));
+  for (int i = 0; i < 4; i++) memcpy(pen + aoffPoints[i], aafSaved[i], sizeof(aafSaved[i]));
 }
 
 bool InstallMouseLook()
