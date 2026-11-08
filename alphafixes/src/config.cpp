@@ -146,6 +146,11 @@ void LoadConfig(bool bWriteBack)
   g_cfg.bTfeThirdPerson = ReadInt("Gameplay", "TfeThirdPerson", def.bTfeThirdPerson) != 0;
   g_cfg.bMenuPause = ReadInt("Gameplay", "MenuPause", def.bMenuPause) != 0;
   g_cfg.bTriggerChainFix = ReadInt("Gameplay", "TriggerChainFix", def.bTriggerChainFix) != 0;
+  GetPrivateProfileStringA("Gameplay", "QuickSaveKey", KeyName(def.iQuickSaveKey), str, sizeof(str), IniPath().c_str());
+  g_cfg.iQuickSaveKey = ParseKey(str, def.iQuickSaveKey);
+  GetPrivateProfileStringA("Gameplay", "QuickLoadKey", KeyName(def.iQuickLoadKey), str, sizeof(str), IniPath().c_str());
+  g_cfg.iQuickLoadKey = ParseKey(str, def.iQuickLoadKey);
+  g_cfg.bDeathLoad = ReadInt("Gameplay", "DeathLoad", def.bDeathLoad) != 0;
 
   g_cfg.bPropertyGrid = ReadInt("Editor", "PropertyGrid", def.bPropertyGrid) != 0;
 
@@ -200,6 +205,9 @@ void SaveConfig()
   WriteInt("Gameplay", "TfeThirdPerson", g_cfg.bTfeThirdPerson);
   WriteInt("Gameplay", "MenuPause", g_cfg.bMenuPause);
   WriteInt("Gameplay", "TriggerChainFix", g_cfg.bTriggerChainFix);
+  WriteString("Gameplay", "QuickSaveKey", KeyName(g_cfg.iQuickSaveKey));
+  WriteString("Gameplay", "QuickLoadKey", KeyName(g_cfg.iQuickLoadKey));
+  WriteInt("Gameplay", "DeathLoad", g_cfg.bDeathLoad);
 
   WriteInt("Editor", "PropertyGrid", g_cfg.bPropertyGrid);
 }

@@ -308,6 +308,14 @@ void OtherSection()
              "Network games go on, as in the alpha.");
   ImGui::Checkbox("AlphaFixes page in the game's Options menu", &g_cfg.bInGameMenu);
   HelpMarker("Takes effect the next time the game starts.");
+  {
+    std::string strSave = KeyName(g_cfg.iQuickSaveKey);   // KeyName() has one buffer
+    ImGui::Text("Quick save: %s, quick load: %s (QuickSaveKey, QuickLoadKey in AlphaFixes.ini)", strSave.c_str(),
+                KeyName(g_cfg.iQuickLoadKey));
+  }
+  ImGui::Checkbox("Click after death loads the quick save", &g_cfg.bDeathLoad);
+  HelpMarker("When you die, a left click loads the quick save made in this game, or else restarts the level "
+             "with what you brought into it.");
   ImGui::Text("Settings window key: %s (ToggleKey in AlphaFixes.ini)", KeyName(g_cfg.iToggleKey));
   ImGui::TextDisabled("Frame time %.2f ms (%.0f fps)", _fFrameMs, _fFrameMs > 0 ? 1000.0f / _fFrameMs : 0.0f);
 }
@@ -582,6 +590,7 @@ BOOL WINAPI PeekMessageA_Hook(LPMSG pmsg, HWND hwnd, UINT uMin, UINT uMax, UINT 
     void *pvReturn = _ReturnAddress();
     if (pvReturn == (void *)EXE_MAINLOOP_PEEK_RETURN1 || pvReturn == (void *)EXE_MAINLOOP_PEEK_RETURN2) {
       RunDeferredDisplayWork();
+      RunQuickSave();
 #if AF_TEST_AIDS
       RunTestAids();
 #endif

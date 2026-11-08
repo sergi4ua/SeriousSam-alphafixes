@@ -89,6 +89,9 @@ struct Config {
   bool  bTfeThirdPerson = true;        // third-person camera like The First Encounter's (see thirdperson.cpp)
   bool  bMenuPause = true;             // the menu pauses a game with every player on this computer (see pause.cpp)
   bool  bTriggerChainFix = true;       // trigger messages reach a player when none started the chain (see chainfix.cpp)
+  int   iQuickSaveKey = VK_F6;         // quick save (see quicksave.cpp)
+  int   iQuickLoadKey = VK_F9;         // quick load
+  bool  bDeathLoad = true;             // a left click after death loads the quick save or restarts the level
 
   // [Editor]
   bool  bPropertyGrid = true;          // World Editor: all properties in one grid (see propgrid.cpp)
@@ -220,6 +223,10 @@ void InstallEditorFixes();
 
 // propgrid.cpp (WorldEditor.exe)
 bool InstallPropertyGrid();
+
+// quicksave.cpp
+void InstallQuickSave();
+void RunQuickSave();                          // main thread, between frames
 
 // chainfix.cpp (game and World Editor)
 void InstallTriggerChainFix(HMODULE hEntities);
