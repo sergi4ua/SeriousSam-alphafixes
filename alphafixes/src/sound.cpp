@@ -17,6 +17,17 @@
 //   that sum: times the master volume, then through a soft limiter (unchanged
 //   below 3/4 of full scale, rounded off above), or with SoftClipping off a
 //   plain clamp.  Quiet sounds keep their original level.
+// - Sound came 150-200 ms late.  The engine plays through waveOut with a
+//   buffer of snd_fMixAhead seconds (0.2, CSoundLibrary::NewFormat at
+//   0x6003E7C1), and MixSounds, run by a timer handler every 50 ms, refills
+//   every block that has played, so the buffer is always nearly full: a new
+//   sound is heard after everything already queued (measured: 141-191 ms
+//   queued at each write).  The mod sets snd_fMixAhead to [Sound] MixAhead
+//   (0.07) before the engine opens the device, and also mixes once every frame
+//   on the main thread (MixSounds locks the sound library, so the two never
+//   overlap), so the buffer is topped up every few milliseconds instead of
+//   every 50.  The timer handler still mixes too, which keeps the sound going
+//   through a long frame.
 #include "alphafixes.h"
 
 #include <cmath>
@@ -34,6 +45,8 @@ constexpr uintptr_t ENG_RESET_MIXER = 0x6003F3F0;     // void ResetMixer(SWORD *
 constexpr uintptr_t ENG_MIX_SOUND = 0x6003F470;       // void MixSound(CSoundObject *pso): adds it to the mixer buffer
 constexpr uintptr_t ENG_COPY_MIXER = 0x6003F440;      // void CopyMixerBuffer(SLONG slSrcOffset, void *pDest, SLONG slBytes)
 constexpr uintptr_t ENG_MIXER_BUFFER = 0x6010D99C;    // SWORD *: where the mixer writes (all its loops read it)
+constexpr uintptr_t ENG_MIXAHEAD = 0x600FFD80;        // FLOAT snd_fMixAhead
+constexpr uintptr_t ENG_MIXAHEAD_USE = 0x6003E7C1;    // NewFormat: fmul dword ptr [snd_fMixAhead]
 
 constexpr float KNEE = 24576.0f;                      // 3/4 of full scale
 
@@ -45,6 +58,8 @@ ResetMixer_t _pfnResetMixer = nullptr;
 MixSound_t _pfnMixSound = nullptr;
 CopyMixer_t _pfnCopyMixer = nullptr;
 Method_t _pfnAudioStart = nullptr;
+Method_t _pfnMixSounds = nullptr;
+void **_ppSoundLibrary = nullptr;
 
 // All mixing runs inside CSoundLibrary::MixSounds, one call at a time.
 short *_pswEngineBuffer = nullptr;
@@ -159,6 +174,20 @@ void InstallSoundFixes()
             && HookFunction((void *)ENG_COPY_MIXER, (void *)CopyMixer_Hook, (void **)&_pfnCopyMixer, "CopyMixerBuffer")
             && HookFunction((void *)EXE_AUDIO_START, (void *)AudioStart_Hook, (void **)&_pfnAudioStart, "Audio options start");
   Log("Sound fixes: %s", bOk ? "installed" : "code differs, not installed");
+
+  // fmul dword ptr [snd_fMixAhead]
+  static const BYTE aubMixAhead[] = { 0xD8, 0x0D, 0x80, 0xFD, 0x0F, 0x60 };
+  _pfnMixSounds = (Method_t)EngineProc("?MixSounds@CSoundLibrary@@QAEXXZ");
+  _ppSoundLibrary = (void **)EngineProc("?_pSoundLibrary@@3PAVCSoundLibrary@@A");
+  float *pfMixAhead = (float *)ENG_MIXAHEAD;
+  bool bLatency = _pfnMixSounds != nullptr && _ppSoundLibrary != nullptr
+               && CodeMatches(ENG_MIXAHEAD_USE, aubMixAhead, sizeof(aubMixAhead)) && *pfMixAhead == 0.2f;
+  if (bLatency) {
+    WriteCode(pfMixAhead, &g_cfg.fMixAhead, sizeof(float));
+  } else {
+    _pfnMixSounds = nullptr;
+  }
+  Log("Sound latency: %s", bLatency ? "mix-ahead set, mixing every frame" : "code differs, not changed");
 }
 
 // Every frame: a moved slider changes the setting, a changed setting (settings
@@ -166,6 +195,9 @@ void InstallSoundFixes()
 // after the mod started, so the first frame puts the saved position back.
 void UpdateSound()
 {
+  // top the output buffer up (main thread; see the top of this file)
+  if (_pfnMixSounds != nullptr && *_ppSoundLibrary != nullptr) _pfnMixSounds(*_ppSoundLibrary, nullptr);
+
   static int _iLastPosition = -1;
   int &iPosition = *(int *)(EXE_VOLUME_SLIDER + SLIDER_POSITION);
   if (_iLastPosition >= 0 && iPosition != _iLastPosition && iPosition >= 0 && iPosition <= 16) {

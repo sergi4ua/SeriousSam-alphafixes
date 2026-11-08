@@ -111,6 +111,8 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   Log("In-game menu: %s", InstallInGameMenu() ? "ok" : "failed");
 #if AF_TEST_AIDS
   InstallTestAids();
+  InstallPerfDiag();
+  InstallGlStateDiag();
 #endif
   Log("Display fixes: %s", InstallDisplayFixes() ? "ok" : "partly failed");
   Log("Widescreen fixes: %s", InstallWidescreenFixes() ? "ok" : "partly failed");

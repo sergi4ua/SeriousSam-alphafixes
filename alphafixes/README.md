@@ -3,9 +3,30 @@ Includes editorfix and alphafixes. Press F11 to access patch menu or go to Setti
 Installation:
 Copy the contents of this archive to the root folder of Serious Sam Alpha. Replace files if asked.
 
-
-
 ```
+0.6 Public Test 1:
+
+Added:
+TFE-style third person camera
+Ported RobotDriving entity from Alpha Remake
+Ported Damager entity from TFE
+Ported Copier entity from TFE
+Trigger2 entity with 10 targets, score (should work like the Trigger from TFE)
+New VirtualTree with the new entities and textures (needs to be loaded manually)
+
+Changed:
+SamAlphaEditorFixes.dll is now integrated in AlphaFixes.dll, no need to patch the editor anymore
+Editor: entities property window now look more like Serious Editor 2017; this menu can be disabled in ini file
+
+Fixed:
+Ghostbuster ray acceleration
+Pause menu now properly pauses the game
+The pause key (not to be confused with the pause menu) no longer floods the console with messages
+Trigger should now display messages (should work like in TFE)
+BSP bug that sometimes made TouchField not work
+TouchField no longer requires a portal for moving players
+Low latency mouse fix should work properly in noclip/fly mode. It still bugs out a bit when in a different gravity sector, this will be fixed in the next version/public test
+
 Updated in 0.5 Public Test 2:
 - Widescreen fixes for the crosshair
 - Thirdperson fixes
@@ -32,7 +53,7 @@ Fixed:
 - Alpha werebull model
 - Not Precached message disabled
 - Saving/Loading by including SaveGame folder
-- Game\_startup.scr not found message in console
+- Game_startup.scr not found message in console
 
 Editor:
 - Added freeview mode (works like in TFE/TSE editors)
@@ -45,25 +66,19 @@ PLEASE NOTE: the game fixes are currently not working in the editor.
 
 Please report any bugs/glitches/etc. to the issue tracker.
 
-
 Credits:
-
 Created by Sergi4UA
-
-Testers: Biktim, Jarmen
-
+Entities & Models: Biktim
+Testers: Biktim, Jarmen, Gyro Zeppeli, Mazuto
+Special Thanks to: Zdzichu 
 MinHook by Tsuda Kageyu
 
 Discord: Sergi4UA
-
 Telegram: https://t.me/sergi4uaworkshop
-
 YouTube: https://youtube.com/user/Sergi4UA
-
 Part of the Serious Sam Hyper Server and Serious Sam Community on Telegram: https://t.me/Serious_Sam_Hyper_Server
 
 Enjoy :)
 
-This release was done with a lot of time spent on debugging and fixes. I always wanted to play the original Alpha version and Origins, but unfortuantely Origins mod was cancelled... but at least we have this alpha version.
-I made this project in hopes that the Serious Sam community will find it useful... if you like the project, just a simple "Thank You" is enough :)
-
+This release was done with a lot of time spent on debugging and fixes. I always wanted to play the original Alpha version and Origins, but unfortunately Origins mod was cancelled... but at least we have this alpha version.
+I made this project in hopes that the Serious Sam community will find it useful... if you like the project just a simple "Thank You" is enough :)

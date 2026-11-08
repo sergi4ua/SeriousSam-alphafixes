@@ -10,7 +10,7 @@
 #include <vector>
 
 #define AF_TITLE "AlphaFixes"
-#define AF_VERSION "0.6-pt1"
+#define AF_VERSION "0.6-pt2"
 #define AF_AUTHOR "Sergi4UA"
 #define AF_DEFAULT_BANNER AF_TITLE " {version} by " AF_AUTHOR
 
@@ -69,6 +69,7 @@ struct Config {
   // [Sound]
   int   iMasterVolume = 8;             // the Audio options slider: 0..16, 8 = the original level (see sound.cpp)
   bool  bSoftClipping = true;          // round off the loudest peaks of the mix instead of clipping them
+  float fMixAhead = 0.07f;             // seconds of sound queued ahead (the alpha: 0.2); takes effect at the next start
 
   // [Graphics]
   bool  bVSync = false;                // wait for the monitor's refresh (see graphics.cpp)
@@ -223,6 +224,16 @@ bool InstallPropertyGrid();
 // chainfix.cpp (game and World Editor)
 void InstallTriggerChainFix(HMODULE hEntities);
 void InstallEditorEntitiesFixes(HMODULE hEntities);   // main.cpp: the editor loaded Entities.dll
+
+// perfdiag.cpp (test builds, AF_LOG_PERF=1)
+void InstallPerfDiag();
+void PerfNoteAction(const char *strWhat, const char *pAction);
+
+// glstatediag.cpp (test builds, AF_LOG_GLSTATE=1)
+void InstallGlStateDiag();
+void UpdateGlStateDiag();                     // every frame
+void TakeGlUploadStats(int &ct, long long &llPixels, double &dMs);
+void EndGlFrame(bool bLong);
 
 // testaids.cpp
 #if AF_TEST_AIDS

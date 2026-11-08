@@ -231,6 +231,9 @@ void SoundSection()
   ImGui::SameLine();
   if (ImGui::SmallButton("8")) g_cfg.iMasterVolume = 8;
   ImGui::Checkbox("Soft clipping", &g_cfg.bSoftClipping);
+  ImGui::SliderFloat("Sound mix-ahead", &g_cfg.fMixAhead, 0.05f, 0.2f, "%.2f s");
+  HelpMarker("How much sound is queued ahead.  Less is heard sooner; too little can crackle on a slow PC.  "
+             "The game used 0.20.  Takes effect at the next start.");
   HelpMarker("Rounds off the loudest peaks instead of clipping them hard, so many loud sounds "
              "at once don't distort.  Off: a plain clamp, like the original.");
 }
@@ -515,6 +518,7 @@ BOOL WINAPI SwapBuffers_Hook(HDC hdc)
   UpdateLateHooks();
   UpdateGraphicsOptions();
   UpdateSound();
+  UpdateGlStateDiag();
   bool bScreenshot = ScreenshotRequested();
   if (_bImGuiReady && (_bVisible || g_cfg.bShowFps || bScreenshot)) DrawOverlay(hdc, bScreenshot);
   return _pfnSwapBuffers(hdc);

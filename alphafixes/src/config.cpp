@@ -127,6 +127,7 @@ void LoadConfig(bool bWriteBack)
   g_cfg.iMasterVolume = ReadInt("Sound", "MasterVolume", def.iMasterVolume);
   if (g_cfg.iMasterVolume < 0 || g_cfg.iMasterVolume > 16) g_cfg.iMasterVolume = def.iMasterVolume;
   g_cfg.bSoftClipping = ReadInt("Sound", "SoftClipping", def.bSoftClipping) != 0;
+  g_cfg.fMixAhead = Clamp(ReadFloat("Sound", "MixAhead", def.fMixAhead), 0.05f, 0.5f);
 
   g_cfg.bVSync = ReadInt("Graphics", "VSync", def.bVSync) != 0;
   g_cfg.iAnisotropy = ReadInt("Graphics", "Anisotropy", def.iAnisotropy);
@@ -182,6 +183,7 @@ void SaveConfig()
 
   WriteInt("Sound", "MasterVolume", g_cfg.iMasterVolume);
   WriteInt("Sound", "SoftClipping", g_cfg.bSoftClipping);
+  WriteFloat("Sound", "MixAhead", g_cfg.fMixAhead);
 
   WriteInt("Graphics", "VSync", g_cfg.bVSync);
   WriteInt("Graphics", "Anisotropy", g_cfg.iAnisotropy);

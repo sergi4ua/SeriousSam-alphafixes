@@ -393,6 +393,7 @@ void __fastcall CreateAction_Hook(char *pControls, void *pvEdx, char *pAction)
 {
   _pfnCreateAction(pControls, pvEdx, pAction);
   PutWheelInAction(pAction);
+  PerfNoteAction("created", pAction);
 
   EnterCriticalSection(&_csLook);
   ReadAxisMapping(pControls, AXIS_ACTION_HEADING, -1.0f, _fHeadingPerX, _fHeadingPerY);
@@ -412,6 +413,7 @@ bool SameBits(float f1, float f2) { return memcmp(&f1, &f2, sizeof(float)) == 0;
 void __fastcall ApplyAction_Hook(char *pen, void *pvEdx, const char *pAction, float fLatency)
 {
   if (pen == _penViewer) {
+    PerfNoteAction("applied", pAction);
     const float *pfRotation = (const float *)(pAction + PA_ROTATION);
     EnterCriticalSection(&_csLook);
     // A turning action is matched anywhere in the queue: its values are as

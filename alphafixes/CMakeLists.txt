@@ -38,7 +38,7 @@ target_include_directories(minhook PUBLIC ${MINHOOK_DIR}/include)
 # --- AlphaFixes.dll ------------------------------------------------------------
 add_library(AlphaFixes SHARED
   src/main.cpp src/config.cpp src/patch.cpp src/display.cpp src/widescreen.cpp
-  src/mouse.cpp src/overlay.cpp src/streamfix.cpp src/lightfix.cpp src/fieldfix.cpp src/zorderfix.cpp src/cannon.cpp src/weapons.cpp src/crosshair.cpp src/thirdperson.cpp src/texts.cpp src/settingsfile.cpp src/graphics.cpp src/sound.cpp src/ingamemenu.cpp src/pause.cpp src/testaids.cpp src/alphafixes.h
+  src/mouse.cpp src/overlay.cpp src/streamfix.cpp src/lightfix.cpp src/fieldfix.cpp src/zorderfix.cpp src/cannon.cpp src/weapons.cpp src/crosshair.cpp src/thirdperson.cpp src/texts.cpp src/settingsfile.cpp src/graphics.cpp src/sound.cpp src/ingamemenu.cpp src/pause.cpp src/testaids.cpp src/perfdiag.cpp src/glstatediag.cpp src/alphafixes.h
   src/editor.cpp src/propgrid.cpp src/chainfix.cpp src/objimport.c src/objimport.h)
 target_link_libraries(AlphaFixes PRIVATE imgui minhook opengl32 user32 gdi32 comdlg32)
 target_compile_options(AlphaFixes PRIVATE /W4 /wd4100)
