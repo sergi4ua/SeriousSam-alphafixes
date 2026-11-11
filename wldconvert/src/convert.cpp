@@ -191,6 +191,16 @@ private:
         continue;
       }
       const AlphaClass *pac = m_alpha.ForFile(en.strClass);
+      // TFE triggers become Trigger2 (AlphaFixesEntities.dll), the First
+      // Encounter's own Trigger, when it is installed
+      bool bTrigger2 = false;
+      if (!m_opt.bAlphaTrigger && ToLower(strName) == "trigger") {
+        const AlphaClass *pacTrigger2 = m_alpha.ForFile("Classes\\Trigger2.ecl");
+        if (pacTrigger2 != nullptr) {
+          pac = pacTrigger2;
+          bTrigger2 = true;
+        }
+      }
       if (pac != nullptr && (pac->strEngineBase == "CPlayerEntity" || pac->strCpp == "CGhostBusterRay")) {
         m_rep.Add("Dropped entities", strName + ": runtime-only class, not placed in levels");
         continue;
@@ -208,16 +218,22 @@ private:
         m_rep.Add("Dropped entities", strName + ": class not in the alpha");
         continue;
       }
-      if (!bBrush && !m_opt.bAllSpawnFlags && (en.ulSpawnFlags & m_opt.ulSpawnMask) != m_opt.ulSpawnMask) {
-        m_rep.Add("Dropped entities", strName + ": not active in single player at normal difficulty (spawn flags)");
+      // difficulty flags go to the spawn flags file, for AlphaFixes' difficulty setting;
+      // the game mode (and the difficulty, with --difficulty) is chosen here
+      uint32_t ulMask = m_opt.bDropByDifficulty ? m_opt.ulSpawnMask : (m_opt.ulSpawnMask & 0xFFFF0000u);
+      if (!bBrush && !m_opt.bAllSpawnFlags && (en.ulSpawnFlags & ulMask) != ulMask) {
+        m_rep.Add("Dropped entities", strName + (m_opt.bDropByDifficulty ? ": not active in this game mode at this difficulty (spawn flags)"
+                                                                         : ": not active in this game mode (spawn flags)"));
         continue;
       }
       m_aiNewIndex[i] = (int32_t)m_out.aentities.size();
       m_mapIDToIndex[en.ulID] = (int32_t)m_out.aentities.size();
       OutEntity oe;
       oe.pac = pac;
+      oe.ulSpawnFlags = en.ulSpawnFlags;
       m_out.aentities.push_back(oe);
       m_rep.Add("Converted entities", pac->strName.empty() ? strName : FileBase(pac->strFile));
+      if (bTrigger2) m_rep.Add("Changed entities", strName + ": became Trigger2 (The First Encounter's Trigger)");
       if (bBrush) m_abBrushUsed.insert(en.iBrush);
     }
   }

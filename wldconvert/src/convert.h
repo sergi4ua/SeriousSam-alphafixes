@@ -14,7 +14,9 @@ struct Options {
   std::string strGameDir;               // the alpha's folder
   AlphaEngine *pEngine = nullptr;       // if running: models and textures must load in it
   uint32_t ulSpawnMask = (1u << 1) | (1u << 16);   // entities must be active at normal difficulty in single player
+  bool bDropByDifficulty = false;       // --difficulty given: also drop entities not active at it
   bool bAllSpawnFlags = false;          // keep entities whatever their spawn flags
+  bool bAlphaTrigger = false;           // TFE triggers become the alpha's Trigger, not Trigger2
 };
 
 // an entity as the alpha will read it
@@ -39,6 +41,7 @@ struct OutEntity {
   bool bHasLight = false;
   std::vector<LightLayerRef> alayers;
   float fHealth = 0;
+  uint32_t ulSpawnFlags = 0xFFFFFFFF;   // the TFE flags; the alpha can't save them (see SpawnFlagsText)
 };
 
 struct OutWorld {
@@ -59,6 +62,18 @@ void ConvertWorld(World &wo, const TfeClasses &tfe, AlphaClasses &alpha, const O
 // alpha_write.cpp
 Bytes WriteAlphaWorld(const OutWorld &out);
 
+// The spawn flags file that AlphaFixes reads next to a level ("<level>.spawnflags"):
+// the alpha's level format can't hold entities' spawn flags.  One line per entity
+// whose flags aren't "exists always": index, class name, position, flags.
+struct SpawnFlagsEntry {
+  int32_t iEntity;
+  std::string strClass;
+  float af[3];
+  uint32_t ulFlags;
+};
+std::string SpawnFlagsText(const std::string &strWorld, int32_t ctEntities, const std::vector<SpawnFlagsEntry> &aEntries);
+constexpr uint32_t SPF_ALWAYS = 0x0007000F;   // every difficulty and game mode
+
 // engine.cpp: the alpha's Engine.dll, running in this process (only when the
 // converter runs from the alpha's Bin folder)
 class AlphaEngine {
@@ -68,7 +83,10 @@ public:
   bool CanLoad(const std::string &strRelFile);
   // the engine pass: load the converted world, initialize every entity again
   // (as if it had just been placed in the editor) and save it
-  bool Reinitialize(const std::string &strRelIn, const std::string &strRelOut, std::string &strError);
+  // aulSpawnFlags: the flags of the converted world's entities, in its order; they are
+  // given to the loaded entities, and strSpawnFlags gets the saved world's spawn flags file
+  bool Reinitialize(const std::string &strRelIn, const std::string &strRelOut, const std::vector<uint32_t> &aulSpawnFlags,
+                    std::string &strSpawnFlags, std::string &strError);
   // a file to delete if the process has to be ended because the engine got stuck
   void CleanUpOnAbort(const std::string &strFile);
   // what the engine would have shown in message boxes

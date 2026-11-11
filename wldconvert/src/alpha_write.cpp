@@ -11,6 +11,8 @@
 //    flag (CMovableEntity).
 #include "convert.h"
 
+#include <cstdio>
+
 namespace {
 
 void WritePlacement(Writer &w, const Placement &pl) { w.Raw(pl.af, sizeof(pl.af)); }
@@ -200,4 +202,22 @@ Bytes WriteAlphaWorld(const OutWorld &out)
   w.EndDictionary();
   w.ID("WEND");
   return w.Data();
+}
+
+std::string SpawnFlagsText(const std::string &strWorld, int32_t ctEntities, const std::vector<SpawnFlagsEntry> &aEntries)
+{
+  if (aEntries.empty()) return std::string();
+  std::string str = "AlphaFixes spawn flags 1\n";
+  str += "; The spawn flags of " + strWorld + ", which the alpha's level format can't hold.\n";
+  str += "; Written by WldConvert from the First Encounter level; AlphaFixes reads it when the level is loaded.\n";
+  str += "; Flags: Easy 1, Normal 2, Hard 4, Extreme 8, Single 10000, Deathmatch 20000, Cooperative 40000.\n";
+  str += "; entity index, class, position x y z (to check the entity), flags (hex)\n";
+  str += "Entities " + std::to_string(ctEntities) + "\n";
+  for (const SpawnFlagsEntry &se : aEntries) {
+    char ach[512];
+    snprintf(ach, sizeof(ach), "%d \"%s\" %.9g %.9g %.9g %08X\n", se.iEntity, se.strClass.c_str(), se.af[0], se.af[1],
+             se.af[2], se.ulFlags);
+    str += ach;
+  }
+  return str;
 }

@@ -253,6 +253,27 @@ bool RunWatched(const char *strWhat, Step step, void *pwo, const char *str)
   return bOK;
 }
 
+// CWorld and CEntity in this engine
+constexpr size_t WORLD_ENTITIES = 0x100;       // CWorld::wo_cenEntities: array, count
+constexpr size_t EN_SPAWNFLAGS = 0x14;         // not saved by CEntity::Write_t
+constexpr size_t EN_PLACEMENT = 0x1C;
+constexpr size_t EN_CLASS = 0x58;              // en_pecClass -> ec_pdecDLLClass (+0x18) -> dec_strName (+0x18)
+
+bool WorldEntities(void *pwo, char **&apen, int32_t &ct)
+{
+  apen = *(char ***)((char *)pwo + WORLD_ENTITIES);
+  ct = *(int32_t *)((char *)pwo + WORLD_ENTITIES + 4);
+  return apen != nullptr && ct > 0;
+}
+
+const char *EntityClassName(char *pen)
+{
+  char *pec = *(char **)(pen + EN_CLASS);
+  char *pdec = pec != nullptr ? *(char **)(pec + 0x18) : nullptr;
+  const char *str = pdec != nullptr ? *(const char **)(pdec + 0x18) : nullptr;
+  return str != nullptr ? str : "?";
+}
+
 bool _bStarted = false;
 void *_pwo = nullptr;
 std::map<std::string, bool> _mapUsable;
@@ -334,8 +355,10 @@ void AlphaEngine::CleanUpOnAbort(const std::string &strFile)
   _astrCleanup.push_back(strFile);
 }
 
-bool AlphaEngine::Reinitialize(const std::string &strRelIn, const std::string &strRelOut, std::string &strError)
+bool AlphaEngine::Reinitialize(const std::string &strRelIn, const std::string &strRelOut, const std::vector<uint32_t> &aulSpawnFlags,
+                               std::string &strSpawnFlags, std::string &strError)
 {
+  strSpawnFlags.clear();
   if (!_bStarted) {
     strError = "the engine wasn't started";
     return false;
@@ -351,6 +374,32 @@ bool AlphaEngine::Reinitialize(const std::string &strRelIn, const std::string &s
     if (!RunWatched(s.strWhat, s.step, _pwo, s.str)) {
       strError = std::string(s.strWhat) + " failed: " + _strEngineError;
       return false;
+    }
+    char **apen;
+    int32_t ct;
+    // the engine loads the entities in the file's order
+    if (s.step == STEP_LOAD && WorldEntities(_pwo, apen, ct)) {
+      if ((size_t)ct == aulSpawnFlags.size()) {
+        for (int32_t i = 0; i < ct; i++) *(uint32_t *)(apen[i] + EN_SPAWNFLAGS) = aulSpawnFlags[i];
+      } else {
+        _astrMessages.push_back("WldConvert: the engine loaded " + std::to_string(ct) + " entities, not "
+                                + std::to_string(aulSpawnFlags.size()) + "; no spawn flags file");
+      }
+    }
+    // the saved world's order, with the entities initializing may have added
+    if (s.step == STEP_SAVE && WorldEntities(_pwo, apen, ct) && (size_t)ct >= aulSpawnFlags.size()) {
+      std::vector<SpawnFlagsEntry> aEntries;
+      for (int32_t i = 0; i < ct; i++) {
+        uint32_t ulFlags = *(uint32_t *)(apen[i] + EN_SPAWNFLAGS);
+        if ((ulFlags & SPF_ALWAYS) == SPF_ALWAYS) continue;
+        SpawnFlagsEntry se;
+        se.iEntity = i;
+        se.strClass = EntityClassName(apen[i]);
+        memcpy(se.af, apen[i] + EN_PLACEMENT, sizeof(se.af));
+        se.ulFlags = ulFlags;
+        aEntries.push_back(se);
+      }
+      strSpawnFlags = SpawnFlagsText(strRelOut, ct, aEntries);
     }
   }
   return true;

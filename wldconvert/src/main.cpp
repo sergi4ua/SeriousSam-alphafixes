@@ -23,10 +23,12 @@ void Usage()
     "\n"
     "Options:\n"
     "  --game <folder>     the alpha's folder (default: the folder above the one WldConvert.exe is in)\n"
-    "  --difficulty <d>    keep entities active at this difficulty: tourist, easy, normal (default),\n"
-    "                      hard, extreme\n"
+    "  --difficulty <d>    keep only entities active at this difficulty: tourist, easy, normal,\n"
+    "                      hard, extreme (default: keep them all, and write their difficulty flags\n"
+    "                      to <output>.spawnflags for AlphaFixes' Difficulty setting)\n"
     "  --mode <m>          keep entities active in this game mode: single (default), coop, dm\n"
     "  --all-entities      keep entities whatever their difficulty and game mode flags\n"
+    "  --alpha-trigger     triggers become the alpha's Trigger instead of Trigger2\n"
     "  --no-engine         skip the engine pass (entities are then not initialized)\n"
     "  --report <file>     also write the conversion report to this file\n"
     "  --force             overwrite the output file if it exists\n"
@@ -100,6 +102,7 @@ int main(int argc, char **argv)
       else if (strD == "extreme") ulDifficulty = 1u << 3;
       else if (strD == "tourist") ulDifficulty = 1u << 4;
       else { fprintf(stderr, "unknown difficulty '%s'\n", strD.c_str()); return 1; }
+      opt.bDropByDifficulty = true;
     }
     else if (str == "--mode" && bNext) {
       std::string strM = ToLower(argv[++i]);
@@ -109,6 +112,7 @@ int main(int argc, char **argv)
       else { fprintf(stderr, "unknown game mode '%s'\n", strM.c_str()); return 1; }
     }
     else if (str == "--all-entities") opt.bAllSpawnFlags = true;
+    else if (str == "--alpha-trigger") opt.bAlphaTrigger = true;
     else if (str == "--no-engine") bEngine = false;
     else if (str == "--report" && bNext) strReport = argv[++i];
     else if (str == "--force") bForce = true;
@@ -189,9 +193,23 @@ int main(int argc, char **argv)
     return 1;
   }
   Bytes abOut = WriteAlphaWorld(out);
+  std::vector<uint32_t> aulSpawnFlags;
+  for (const OutEntity &oe : out.aentities) aulSpawnFlags.push_back(oe.ulSpawnFlags);
+  std::string strSpawnFlags;
+  // the spawn flags file for the world as the converter wrote it (no engine pass)
+  auto SpawnFlagsOfOutput = [&]() {
+    std::vector<SpawnFlagsEntry> aEntries;
+    for (size_t i = 0; i < out.aentities.size(); i++) {
+      const OutEntity &oe = out.aentities[i];
+      if ((oe.ulSpawnFlags & SPF_ALWAYS) == SPF_ALWAYS) continue;
+      aEntries.push_back({ (int32_t)i, oe.pac->strName, { oe.pl.af[0], oe.pl.af[1], oe.pl.af[2] }, oe.ulSpawnFlags });
+    }
+    return SpawnFlagsText(FileBase(strOut), (int32_t)out.aentities.size(), aEntries);
+  };
 
   if (!bEngine) {
     if (!WriteFile(strOut, abOut)) { fprintf(stderr, "Cannot write %s\n", strOut.c_str()); return 1; }
+    strSpawnFlags = SpawnFlagsOfOutput();
     rep.Add("Engine pass", "not done: entities are in the file but not initialized (they don't act in the game);"
                            " a property change in the editor initializes an entity");
   } else {
@@ -210,7 +228,7 @@ int main(int argc, char **argv)
     if (bCopy) engine.CleanUpOnAbort(opt.strGameDir + "\\" + strRelOut);
     printf("Converted; now loading it in the alpha's engine to initialize the entities.\n");
     fflush(stdout);
-    bool bOK = engine.Reinitialize(strRelRaw, strRelOut, strError);
+    bool bOK = engine.Reinitialize(strRelRaw, strRelOut, aulSpawnFlags, strSpawnFlags, strError);
     if (bOK && bCopy && !CopyFileA((opt.strGameDir + "\\" + strRelOut).c_str(), strOut.c_str(), FALSE)) {
       bOK = false;
       strError = "cannot copy the result to " + strOut;
@@ -222,7 +240,26 @@ int main(int argc, char **argv)
     } else {
       // keep what the converter made: the editor still opens it
       WriteFile(strOut, abOut);
+      strSpawnFlags = SpawnFlagsOfOutput();
       rep.Add("Engine pass", "FAILED (" + strError + "); the world was written without it");
+      iExit = 2;
+    }
+  }
+  {
+    // next to the output: "X.wld" -> "X.spawnflags"; an old one is removed when no entity has flags
+    std::string strFlagsFile = strOut;
+    size_t iDot = strFlagsFile.find_last_of('.'), iSlash = strFlagsFile.find_last_of("\\/");
+    if (iDot != std::string::npos && (iSlash == std::string::npos || iDot > iSlash)) strFlagsFile.erase(iDot);
+    strFlagsFile += ".spawnflags";
+    if (strSpawnFlags.empty()) {
+      DeleteFileA(strFlagsFile.c_str());
+    } else if (WriteFile(strFlagsFile, Bytes(strSpawnFlags.begin(), strSpawnFlags.end()))) {
+      size_t ctLines = 0;
+      for (char ch : strSpawnFlags) ctLines += ch == '\n';
+      rep.Add("Spawn flags", std::to_string(ctLines - 6) + " entities exist only at some difficulties; their flags are in "
+                             + FileBase(strFlagsFile) + ".spawnflags, for AlphaFixes' Difficulty setting");
+    } else {
+      rep.Add("Spawn flags", "cannot write " + strFlagsFile);
       iExit = 2;
     }
   }
