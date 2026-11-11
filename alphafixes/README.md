@@ -3,6 +3,7 @@ Includes editorfix and alphafixes. Press F11 to access patch menu or go to Setti
 Note:
 Disabling Threaded optimization in NVIDIA Control Panel/NVIDIA App can in some cases improve performance.
 Increasing Sound mix-ahead may improve perfomance on slower systems (by default 0.20, in default ini 0.18)
+If you make new levels, please make sure to distribute .spawnflags file along with your level (if you changed difficulty spawn flags for entities)
 
 Installation:
 Copy the contents of this archive to the root folder of Serious Sam Alpha. Replace files if asked.
@@ -26,7 +27,7 @@ Fixed:
 - Modeler app startup crash
 - Modeler crash when opening a model
 - Different gravity modes with Low latency mouse fix on
-
+- Modeler save feature (.mdl/.ini/.h files are saved)
 
 0.6 Public Test 1:
 
@@ -50,43 +51,7 @@ Trigger should now display messages (should work like in TFE)
 BSP bug that sometimes made TouchField not work
 TouchField no longer requires a portal for moving players
 Low latency mouse fix should work properly in noclip/fly mode. It still bugs out a bit when in a different gravity sector, this will be fixed in the next version/public test
-
-Updated in 0.5 Public Test 2:
-- Widescreen fixes for the crosshair
-- Thirdperson fixes
-- Ghostbuster ray fix
-- Added fixed crosshair
-- Volume and sound clipping fixes (that famous bullet hit sound is still here)
-
-0.5 Public Test 1:
-Game:
-Added:
-- VSync, anti aliasing and MSAA
-- Raw mouse input
-- Mouse wheel weapon scroll (weapon also shown in the HUD)
-- FPS counter
-- SPC Cannon unlocked both in the game and cheats
-- Mouse sensitivity controlled in F11 menu (both V and H, by default set to 0.50)
-- Widescreen fix
-- DPI aware mode
-- Game settings now store in a separate file (so the alpha editor won't overwrite them)
-
-Fixed:
-- Mouse latency
-- Game crash while switching levels
-- Alpha werebull model
-- Not Precached message disabled
-- Saving/Loading by including SaveGame folder
-- Game_startup.scr not found message in console
-
-Editor:
-- Added freeview mode (works like in TFE/TSE editors)
-- Fixed startup on modern systems
-- Editor uses separate registry settings, which allows your existing TFE/TSE editor to be untouched
-- OBJ file import (via conversion to LWO). Will use game textures, if the texture exists in the game and is defined in the mesh.
-PLEASE NOTE: the game fixes are currently not working in the editor.
 ```
-
 
 Please report any bugs/glitches/etc. to the issue tracker.
 
@@ -95,6 +60,7 @@ Created by Sergi4UA
 Entities & Models: Biktim
 Testers: Biktim, Jarmen, Gyro Zeppeli
 MinHook by Tsuda Kageyu
+Special Thanks to: Zdzichu
 
 Discord: Sergi4UA
 Telegram: https://t.me/sergi4uaworkshop
