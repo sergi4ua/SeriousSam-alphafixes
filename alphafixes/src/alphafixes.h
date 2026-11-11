@@ -123,6 +123,9 @@ bool HookFunction(void *pTarget, void *pDetour, void **ppOriginal, const char *s
 // Replaces an import of hModule (by DLL and function name); returns the old pointer or NULL.
 void *HookImport(HMODULE hModule, const char *strDll, const char *strFunction, void *pNew);
 void *EngineProc(const char *strMangledName);               // export of Engine.dll
+bool SetVTableSlot(void **ppvSlot, void *pvValue);
+// __except filter for engine calls: catches the engine's C++ exceptions, copying a 'throw char *' message
+int CatchEngineError(EXCEPTION_POINTERS *pExceptionInfo, char *strError, size_t ctError, const char *strDefault);
 
 // ---------------------------------------------------------------------------
 // Modules

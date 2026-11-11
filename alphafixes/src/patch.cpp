@@ -89,3 +89,42 @@ void *EngineProc(const char *strMangledName)
   if (p == nullptr) Log("Engine.dll export missing: %s", strMangledName);
   return p;
 }
+
+bool SetVTableSlot(void **ppvSlot, void *pvValue)
+{
+  return WriteCode(ppvSlot, &pvValue, sizeof(pvValue));
+}
+
+/* MSVC C++ exceptions ('throw' in Engine.dll, built with VC 6) */
+#define CPP_EXCEPTION_CODE  0xE06D7363
+#define CPP_EH_MAGIC_VC6    0x19930520
+
+typedef struct { DWORD dwVFTable; DWORD dwSpare; char strName[1]; } TypeDescriptor;
+typedef struct { DWORD dwProperties; TypeDescriptor *ptd; DWORD adwDisp[3]; DWORD dwSize; DWORD dwCopy; } CatchableType;
+typedef struct { int ctTypes; CatchableType *apct[1]; } CatchableTypeArray;
+typedef struct { DWORD dwAttributes; DWORD dwUnwind; DWORD dwForwardCompat; CatchableTypeArray *pcta; } ThrowInfo;
+
+/* Exception filter: catch any engine C++ exception, and copy its message out
+   when it is the engine's usual 'throw char *' (strDefault otherwise). */
+int CatchEngineError(EXCEPTION_POINTERS *pExceptionInfo, char *strError, size_t ctError, const char *strDefault)
+{
+  EXCEPTION_RECORD *per = pExceptionInfo->ExceptionRecord;
+  const ThrowInfo *pti;
+  const char *strType;
+  const char *strMessage;
+
+  if (per->ExceptionCode != CPP_EXCEPTION_CODE || per->NumberParameters < 3
+   || per->ExceptionInformation[0] != CPP_EH_MAGIC_VC6) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+
+  lstrcpynA(strError, strDefault, (int)ctError);
+  pti = (const ThrowInfo *)per->ExceptionInformation[2];
+  if (pti == NULL || pti->pcta == NULL || pti->pcta->ctTypes < 1) return EXCEPTION_EXECUTE_HANDLER;
+  strType = pti->pcta->apct[0]->ptd->strName;
+  if (lstrcmpA(strType, ".PAD") == 0 || lstrcmpA(strType, ".PBD") == 0) {   /* char *, const char * */
+    strMessage = *(const char **)per->ExceptionInformation[1];
+    if (strMessage != NULL) lstrcpynA(strError, strMessage, (int)ctError);
+  }
+  return EXCEPTION_EXECUTE_HANDLER;
+}

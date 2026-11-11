@@ -92,44 +92,6 @@ CWorld_Save_t                     _pfnWorldSave;
 WarningMessage_t                  _pfnWarningMessage;
 BOOL                              _bSaveFixInstalled = FALSE;
 
-BOOL SetVTableSlot(void **ppvSlot, void *pvValue)
-{
-  return WriteCode(ppvSlot, &pvValue, sizeof(pvValue));
-}
-
-/* MSVC C++ exceptions ('throw' in Engine.dll, built with VC 6) */
-#define CPP_EXCEPTION_CODE  0xE06D7363
-#define CPP_EH_MAGIC_VC6    0x19930520
-
-typedef struct { DWORD dwVFTable; DWORD dwSpare; char strName[1]; } TypeDescriptor;
-typedef struct { DWORD dwProperties; TypeDescriptor *ptd; DWORD adwDisp[3]; DWORD dwSize; DWORD dwCopy; } CatchableType;
-typedef struct { int ctTypes; CatchableType *apct[1]; } CatchableTypeArray;
-typedef struct { DWORD dwAttributes; DWORD dwUnwind; DWORD dwForwardCompat; CatchableTypeArray *pcta; } ThrowInfo;
-
-/* Exception filter for SaveWorld(): catch any engine C++ exception, and copy
-   its message out when it is the engine's usual 'throw char *'. */
-int CatchEngineError(EXCEPTION_POINTERS *pExceptionInfo, char *strError, size_t ctError)
-{
-  EXCEPTION_RECORD *per = pExceptionInfo->ExceptionRecord;
-  const ThrowInfo *pti;
-  const char *strType;
-  const char *strMessage;
-
-  if (per->ExceptionCode != CPP_EXCEPTION_CODE || per->NumberParameters < 3
-   || per->ExceptionInformation[0] != CPP_EH_MAGIC_VC6) {
-    return EXCEPTION_CONTINUE_SEARCH;
-  }
-
-  lstrcpynA(strError, "Cannot save world: unknown error.", (int)ctError);
-  pti = (const ThrowInfo *)per->ExceptionInformation[2];
-  if (pti == NULL || pti->pcta == NULL || pti->pcta->ctTypes < 1) return EXCEPTION_EXECUTE_HANDLER;
-  strType = pti->pcta->apct[0]->ptd->strName;
-  if (lstrcmpA(strType, ".PAD") == 0 || lstrcmpA(strType, ".PBD") == 0) {   /* char *, const char * */
-    strMessage = *(const char **)per->ExceptionInformation[1];
-    if (strMessage != NULL) lstrcpynA(strError, strMessage, (int)ctError);
-  }
-  return EXCEPTION_EXECUTE_HANDLER;
-}
 
 BOOL SaveWorld(void *pDoc, const char *strPathName, char *strError, size_t ctError)
 {
@@ -143,7 +105,7 @@ BOOL SaveWorld(void *pDoc, const char *strPathName, char *strError, size_t ctErr
     _pfnRemoveApplicationPath(&fnmWorld, NULL);   /* worlds must be saved inside the game folder */
     _pfnWorldSave((char *)pDoc + WE_DOC_WORLD_OFFSET, NULL, &fnmWorld);
     bSaved = TRUE;
-  } __except (CatchEngineError(GetExceptionInformation(), strError, ctError)) {
+  } __except (CatchEngineError(GetExceptionInformation(), strError, ctError, "Cannot save world: unknown error.")) {
     bSaved = FALSE;
   }
   if (bConstructed) _pfnFileNameDtor(&fnmWorld, NULL);
