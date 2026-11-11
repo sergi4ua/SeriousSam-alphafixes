@@ -272,6 +272,7 @@ BOOL __fastcall NewGame_Hook(void *pGame, void *pvEdx, const void *pstrSession, 
 {
   BOOL b = _pfnNewGame(pGame, pvEdx, pstrSession, pfnmWorld, psp);
   if (b) {
+    ApplyDifficulty("new game");
     _bLevelStartPending = true;
     _ctPendingFrames = 0;
     _bQuickSaveThisGame = false;
@@ -283,6 +284,7 @@ BOOL __fastcall NewGame_Hook(void *pGame, void *pvEdx, const void *pstrSession, 
 void __fastcall ChangeLevel_Hook(void *pnet, void *pvEdx)
 {
   _pfnChangeLevel(pnet, pvEdx);
+  ApplyDifficulty("level change");
   _bLevelStartPending = true;
   _ctPendingFrames = 0;
   _tmDied = 0;

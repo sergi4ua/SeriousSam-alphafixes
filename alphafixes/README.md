@@ -1,9 +1,33 @@
 Includes editorfix and alphafixes. Press F11 to access patch menu or go to Settings > AlphaPatches.
 
+Note:
+Disabling Threaded optimization in NVIDIA Control Panel/NVIDIA App can in some cases improve performance.
+Increasing Sound mix-ahead may improve perfomance on slower systems (by default 0.20, in default ini 0.18)
+
 Installation:
 Copy the contents of this archive to the root folder of Serious Sam Alpha. Replace files if asked.
 
 ```
+0.6 Public Test 2
+
+Added:
+- You can now change the title text (where it said Evaluation Version for Croteam_Test)
+- Added new theme for the weapon selection UI - Clean
+- Quick Save (F6) and Quick Load (F9)
+
+Changed:
+- Ported spawnflags from TFE
+
+Fixed:
+- Input delay due to sound engine buffer. This fix may introduce sound crackles on a slow PC, please use the F11 menu and increase Sound mix-ahead (by default 0.20)
+- TouchField should work as it should
+- Detail polygons from converted TFE levels no longer have Z-Buffer issues
+- Ghostbuster ray on Low latency mouse fix
+- Modeler app startup crash
+- Modeler crash when opening a model
+- Different gravity modes with Low latency mouse fix on
+
+
 0.6 Public Test 1:
 
 Added:
@@ -69,8 +93,7 @@ Please report any bugs/glitches/etc. to the issue tracker.
 Credits:
 Created by Sergi4UA
 Entities & Models: Biktim
-Testers: Biktim, Jarmen, Gyro Zeppeli, Mazuto
-Special Thanks to: Zdzichu 
+Testers: Biktim, Jarmen, Gyro Zeppeli
 MinHook by Tsuda Kageyu
 
 Discord: Sergi4UA
@@ -80,5 +103,5 @@ Part of the Serious Sam Hyper Server and Serious Sam Community on Telegram: http
 
 Enjoy :)
 
-This release was done with a lot of time spent on debugging and fixes. I always wanted to play the original Alpha version and Origins, but unfortunately Origins mod was cancelled... but at least we have this alpha version.
-I made this project in hopes that the Serious Sam community will find it useful... if you like the project just a simple "Thank You" is enough :)
+This release was done with a lot of time spent on debugging and fixes. I always wanted to play the original Alpha version and Origins, but unfortuantely Origins mod was cancelled... but at least we have this alpha version.
+I made this project in hopes that the Serious Sam community will find it useful... if you like the project, just a simple "Thank You" is enough :)

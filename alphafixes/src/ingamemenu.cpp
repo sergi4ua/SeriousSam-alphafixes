@@ -9,8 +9,8 @@
 //
 // When the game sets up the Options page (0x418D70), the mod adds a fourth
 // button there, on the main column item the page leaves unused.  It leads to
-// an AlphaFixes page of two buttons on the main column (like the Options page)
-// for the Graphics and the Mouse and weapons pages.  Those have a title and up
+// an AlphaFixes page of three buttons on the main column (like the Options page)
+// for the Graphics, Mouse and weapons, and Gameplay pages.  Those have a title and up
 // to six rows; their 3D items are made once by the game's own constructors and
 // set-up functions, placed like the Video page's rows, and shared by both.
 // Values change the settings at once; leaving a page saves the ini, and a
@@ -29,6 +29,7 @@ constexpr uintptr_t EXE_OPTIONS_FIRST = 0x436D78;       // "Video options" butto
 constexpr uintptr_t EXE_OPTIONS_LAST = 0x436D08;        // "Audio options" button
 constexpr uintptr_t EXE_MAIN_ITEM_1 = 0x43CAA0;         // main column items at y 2.4 and 1.1
 constexpr uintptr_t EXE_MAIN_ITEM_2 = 0x43CB88;
+constexpr uintptr_t EXE_MAIN_ITEM_3 = 0x43CC70;         // at y -0.2
 constexpr uintptr_t EXE_MAIN_ITEM_4 = 0x43CD58;         // main column item at y -1.5, unused by the Options page
 constexpr uintptr_t EXE_TITLE_ITEM = 0x43D010;          // the menus' title item
 constexpr uintptr_t EXE_ITEM_LIST = 0x43D2F0;           // CListHead of all 3D items
@@ -87,6 +88,7 @@ const char *const _astrWheel[] = { "Off", "Weapons" };
 const char *const _astrWheelUp[] = { "Next", "Previous" };
 const char *const _astrThirdPerson[] = { "Alpha", "TFE" };
 const char *const _astrWeaponBar[] = { "Off", "Tiles", "Clean" };
+const char *const _astrDifficulty[] = { "Off", "Easy", "Normal", "Hard", "Extreme" };
 
 int IndexOfPow2(int i, int iFirst)   // 1/0 -> 0, then 2 -> 1, 4 -> 2 ...
 {
@@ -124,6 +126,11 @@ const Row _aMouseRows[] = {
   { "Third person", _astrThirdPerson, 2, [] { return g_cfg.bTfeThirdPerson ? 1 : 0; }, [](int i) { g_cfg.bTfeThirdPerson = i != 0; } },
 };
 
+// takes effect when the next level is loaded (see difficulty.cpp)
+const Row _aGameplayRows[] = {
+  { "Difficulty", _astrDifficulty, DIFFICULTY_COUNT, [] { return g_cfg.iDifficulty; }, [](int i) { g_cfg.iDifficulty = i; } },
+};
+
 struct Page {
   const char *strButton;        // on the hub
   const char *strTitle;         // the title bar fits about 10 letters
@@ -134,6 +141,7 @@ constexpr int MAX_ROWS = 6;   // what fits between the title and the bottom
 const Page _aPages[] = {
   { "Graphics", "Graphics", _aGraphicsRows, sizeof(_aGraphicsRows) / sizeof(Row) },
   { "Mouse and weapons", "Controls", _aMouseRows, sizeof(_aMouseRows) / sizeof(Row) },
+  { "Gameplay", "Gameplay", _aGameplayRows, sizeof(_aGameplayRows) / sizeof(Row) },
 };
 constexpr int CT_PAGES = sizeof(_aPages) / sizeof(Page);
 
@@ -147,7 +155,7 @@ template <int iPage> struct PageCallbacks {
   static constexpr Changed_t apfn[MAX_ROWS] = { RowChanged<iPage, 0>, RowChanged<iPage, 1>, RowChanged<iPage, 2>,
                                                 RowChanged<iPage, 3>, RowChanged<iPage, 4>, RowChanged<iPage, 5> };
 };
-const Changed_t *const _apfnChanged[CT_PAGES] = { PageCallbacks<0>::apfn, PageCallbacks<1>::apfn };
+const Changed_t *const _apfnChanged[CT_PAGES] = { PageCallbacks<0>::apfn, PageCallbacks<1>::apfn, PageCallbacks<2>::apfn };
 
 // --- objects, in the DLL's memory for the life of the process --------------------
 
@@ -156,7 +164,7 @@ alignas(16) BYTE _aubHub[0x40];
 alignas(16) BYTE _aubHubTitle[0x60];
 alignas(16) BYTE _aubHubButtons[CT_PAGES][0x60];
 alignas(16) BYTE _aubOptionsButton[0x60];            // on the Options page
-constexpr uintptr_t _aulHubItems[CT_PAGES] = { EXE_MAIN_ITEM_1, EXE_MAIN_ITEM_2 };
+constexpr uintptr_t _aulHubItems[CT_PAGES] = { EXE_MAIN_ITEM_1, EXE_MAIN_ITEM_2, EXE_MAIN_ITEM_3 };
 // the settings pages; they share one set of 3D items for their rows
 alignas(16) BYTE _aubPages[CT_PAGES][0x40];
 alignas(16) BYTE _aubTitles[CT_PAGES][0x60];
@@ -223,7 +231,7 @@ void ChangeToMenu(void *pgm) { ((ChangeToMenu_t)EXE_CHANGE_TO_MENU)(pgm); }
 void __cdecl OpenHub() { ChangeToMenu(_aubHub); }
 template <int iPage> void __cdecl OpenPage() { ChangeToMenu(_aubPages[iPage]); }
 using Activated_t = void(__cdecl *)();
-const Activated_t _apfnOpenPage[CT_PAGES] = { OpenPage<0>, OpenPage<1> };
+const Activated_t _apfnOpenPage[CT_PAGES] = { OpenPage<0>, OpenPage<1>, OpenPage<2> };
 
 void *MakeTitle(BYTE *pub, const char *strText, void *plhGadgets)
 {

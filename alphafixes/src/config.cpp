@@ -151,6 +151,8 @@ void LoadConfig(bool bWriteBack)
   GetPrivateProfileStringA("Gameplay", "QuickLoadKey", KeyName(def.iQuickLoadKey), str, sizeof(str), IniPath().c_str());
   g_cfg.iQuickLoadKey = ParseKey(str, def.iQuickLoadKey);
   g_cfg.bDeathLoad = ReadInt("Gameplay", "DeathLoad", def.bDeathLoad) != 0;
+  g_cfg.iDifficulty = ReadInt("Gameplay", "Difficulty", def.iDifficulty);
+  if (g_cfg.iDifficulty < 0 || g_cfg.iDifficulty >= DIFFICULTY_COUNT) g_cfg.iDifficulty = def.iDifficulty;
 
   g_cfg.bPropertyGrid = ReadInt("Editor", "PropertyGrid", def.bPropertyGrid) != 0;
 
@@ -208,6 +210,7 @@ void SaveConfig()
   WriteString("Gameplay", "QuickSaveKey", KeyName(g_cfg.iQuickSaveKey));
   WriteString("Gameplay", "QuickLoadKey", KeyName(g_cfg.iQuickLoadKey));
   WriteInt("Gameplay", "DeathLoad", g_cfg.bDeathLoad);
+  WriteInt("Gameplay", "Difficulty", g_cfg.iDifficulty);
 
   WriteInt("Editor", "PropertyGrid", g_cfg.bPropertyGrid);
 }

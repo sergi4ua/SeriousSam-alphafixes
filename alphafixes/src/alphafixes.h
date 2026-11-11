@@ -16,6 +16,7 @@
 
 // the weapon bar's styles ([Weapons] WeaponBar)
 enum { WEAPONBAR_OFF = 0, WEAPONBAR_TILES = 1, WEAPONBAR_CLEAN = 2 };
+enum { DIFFICULTY_OFF = 0, DIFFICULTY_EASY, DIFFICULTY_NORMAL, DIFFICULTY_HARD, DIFFICULTY_EXTREME, DIFFICULTY_COUNT };
 
 // Testing aids are built only with the CMake option AF_TEST_AIDS (build.bat test).
 #ifndef AF_TEST_AIDS
@@ -92,6 +93,7 @@ struct Config {
   int   iQuickSaveKey = VK_F6;         // quick save (see quicksave.cpp)
   int   iQuickLoadKey = VK_F9;         // quick load
   bool  bDeathLoad = true;             // a left click after death loads the quick save or restarts the level
+  int   iDifficulty = DIFFICULTY_NORMAL;  // entities whose spawn flags leave it out are removed (see difficulty.cpp)
 
   // [Editor]
   bool  bPropertyGrid = true;          // World Editor: all properties in one grid (see propgrid.cpp)
@@ -227,6 +229,11 @@ bool InstallBarStateFix(uintptr_t addrLoadPush, uintptr_t addrLoadCall, uintptr_
 
 // propgrid.cpp (WorldEditor.exe)
 bool InstallPropertyGrid();
+
+// difficulty.cpp
+void InstallSpawnFlags(bool bEditor);           // spawn flags files; in the game also the difficulty
+void ApplyDifficulty(const char *strWhen);     // after a level is loaded fresh
+const char *DifficultyName(int iDifficulty);
 
 // quicksave.cpp
 void InstallQuickSave();

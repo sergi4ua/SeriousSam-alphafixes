@@ -316,6 +316,13 @@ void OtherSection()
   ImGui::Checkbox("Click after death loads the quick save", &g_cfg.bDeathLoad);
   HelpMarker("When you die, a left click loads the quick save made in this game, or else restarts the level "
              "with what you brought into it.");
+  {
+    static const char *const astrDifficulty[] = { "Off", "Easy", "Normal", "Hard", "Extreme" };
+    ImGui::Combo("Difficulty", &g_cfg.iDifficulty, astrDifficulty, DIFFICULTY_COUNT);
+    HelpMarker("Entities whose spawn flags (set in the World Editor) leave out this difficulty are removed when a "
+               "level starts: a new game or a level change.  Off: every entity exists, as in the alpha.  "
+               "Enemies keep their health and damage.");
+  }
   ImGui::Text("Settings window key: %s (ToggleKey in AlphaFixes.ini)", KeyName(g_cfg.iToggleKey));
   ImGui::TextDisabled("Frame time %.2f ms (%.0f fps)", _fFrameMs, _fFrameMs > 0 ? 1000.0f / _fFrameMs : 0.0f);
 }

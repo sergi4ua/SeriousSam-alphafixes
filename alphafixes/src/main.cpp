@@ -87,6 +87,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
     InstallZOrderFix();
     InstallHideNotPrecached();
     InstallEditorFixes();
+    InstallSpawnFlags(true);
     return TRUE;
   }
 
@@ -125,6 +126,7 @@ extern "C" __declspec(dllexport) BOOL __cdecl AF_Init(HMODULE hProxy)
   InstallGraphicsOptions();
   InstallSoundFixes();
   InstallMenuPause();
+  InstallSpawnFlags(false);
   InstallQuickSave();
   Log("In-game menu: %s", InstallInGameMenu() ? "ok" : "failed");
 #if AF_TEST_AIDS
